@@ -1,9 +1,17 @@
 {
   "name": "nuxt-filer",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "File storage module for Nuxt",
-  "repository": "your-org/nuxt-filer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Niki2k1/nuxt-filer.git"
+  },
+  "homepage": "https://github.com/Niki2k1/nuxt-filer#readme",
+  "bugs": {
+    "url": "https://github.com/Niki2k1/nuxt-filer/issues"
+  },
   "license": "MIT",
+  "author": "Niki2k1",
   "type": "module",
   "exports": {
     ".": {
