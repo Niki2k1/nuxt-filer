@@ -1,14 +1,19 @@
 {
-  "name": "my-module",
+  "name": "nuxt-filer",
   "version": "1.0.0",
-  "description": "My new Nuxt module",
-  "repository": "your-org/my-module",
+  "description": "File storage module for Nuxt",
+  "repository": "your-org/nuxt-filer",
   "license": "MIT",
   "type": "module",
   "exports": {
     ".": {
       "types": "./dist/types.d.mts",
       "import": "./dist/module.mjs"
+    },
+    "./runtime/types": {
+      "types": "./src/runtime/types.ts",
+      "import": "./src/runtime/types.ts",
+      "default": "./src/runtime/types.ts"
     }
   },
   "main": "./dist/module.mjs",
@@ -20,7 +25,8 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "src/runtime"
   ],
   "scripts": {
     "prepack": "nuxt-module-build build",
@@ -34,20 +40,28 @@
     "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit"
   },
   "dependencies": {
-    "@nuxt/kit": "^4.1.0"
+    "@nuxt/kit": "^4.4.2",
+    "consola": "^3.4.2",
+    "defu": "^6.1.4"
   },
   "devDependencies": {
-    "@nuxt/devtools": "^2.6.3",
-    "@nuxt/eslint-config": "^1.9.0",
+    "@nuxt/devtools": "^3.2.4",
+    "@nuxt/eslint-config": "^1.15.2",
     "@nuxt/module-builder": "^1.0.2",
-    "@nuxt/schema": "^4.1.0",
-    "@nuxt/test-utils": "^3.19.2",
+    "@nuxt/schema": "^4.4.2",
+    "@nuxt/test-utils": "^4.0.0",
     "@types/node": "latest",
     "changelogen": "^0.6.2",
-    "eslint": "^9.34.0",
-    "nuxt": "^4.1.0",
-    "typescript": "~5.9.2",
-    "vitest": "^3.2.4",
-    "vue-tsc": "^3.0.6"
+    "eslint": "^10.1.0",
+    "nuxt": "^4.4.2",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.2",
+    "vue-tsc": "^3.2.6"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

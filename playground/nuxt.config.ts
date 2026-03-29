@@ -1,5 +1,9 @@
 export default defineNuxtConfig({
   modules: ['../src/module'],
-  myModule: {},
+  filer: {
+    storageName: 'documents',
+    storagePath: '.data/documents',
+    provider: 'unstorage',
+  },
   devtools: { enabled: true },
-})
+});
