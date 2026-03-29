@@ -18,11 +18,11 @@ export function createUnstorageProvider(
   }
 
   function dataKey(groupId: string, id: string) {
-    return `${groupId}:${id}`;
+    return `${groupId}:data:${id}`;
   }
 
   function metaKey(groupId: string, id: string) {
-    return `${groupId}:${id}:meta`;
+    return `${groupId}:meta:${id}`;
   }
 
   return {
@@ -73,7 +73,7 @@ export function createUnstorageProvider(
     async getMeta(id) {
       const storage = getStorage();
       const keys = await storage.getKeys();
-      const key = keys.find((k) => k.endsWith(`:${id}:meta`));
+      const key = keys.find((k) => k.endsWith(`:meta:${id}`));
       if (!key) return null;
 
       const metaData = await storage.getItem<FileMeta>(key);
@@ -84,14 +84,13 @@ export function createUnstorageProvider(
       const storage = getStorage();
       const keys = await storage.getKeys(groupId);
 
-      // Get unique file IDs by filtering meta keys
-      const metaKeys = keys.filter((k) => k.endsWith(':meta'));
+      // Get unique file IDs by filtering meta keys (format: groupId:meta:id)
+      const metaKeys = keys.filter((k) => k.includes(':meta:'));
       const files: StoredFile[] = [];
 
       for (const key of metaKeys) {
-        // Key format: groupId:id:meta
         const parts = key.split(':');
-        const id = parts[parts.length - 2]!;
+        const id = parts[parts.length - 1]!;
 
         const metaData = await storage.getItem<
           FileMeta & { _createdAt?: string; _updatedAt?: string }
@@ -117,7 +116,7 @@ export function createUnstorageProvider(
     async update(id, meta) {
       const storage = getStorage();
       const keys = await storage.getKeys();
-      const key = keys.find((k) => k.endsWith(`:${id}:meta`));
+      const key = keys.find((k) => k.endsWith(`:meta:${id}`));
       if (!key) throw new Error(`File metadata not found: ${id}`);
 
       const existing = await storage.getItem<
@@ -153,7 +152,7 @@ export function createUnstorageProvider(
       const storage = getStorage();
       const prefix = filter.groupId ?? '';
       const keys = await storage.getKeys(prefix);
-      const metaKeys = keys.filter((k) => k.endsWith(':meta'));
+      const metaKeys = keys.filter((k) => k.includes(':meta:'));
 
       for (const key of metaKeys) {
         const metaData = await storage.getItem<
@@ -163,8 +162,9 @@ export function createUnstorageProvider(
 
         if (metaData[filter.key] === filter.value) {
           const parts = key.split(':');
-          const id = parts[parts.length - 2]!;
-          const groupId = parts.slice(0, parts.length - 2).join(':');
+          const id = parts[parts.length - 1]!;
+          const metaIdx = parts.indexOf('meta');
+          const groupId = parts.slice(0, metaIdx).join(':');
 
           return {
             id,

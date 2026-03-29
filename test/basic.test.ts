@@ -2,14 +2,125 @@ import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
 import { setup, $fetch } from '@nuxt/test-utils/e2e'
 
-describe('ssr', async () => {
+describe('nuxt-filer', async () => {
   await setup({
     rootDir: fileURLToPath(new URL('./fixtures/basic', import.meta.url)),
   })
 
   it('renders the index page', async () => {
-    // Get response to a server-rendered page with `$fetch`.
     const html = await $fetch('/')
     expect(html).toContain('<div>basic</div>')
+  })
+
+  it('uploads a file and returns an id', async () => {
+    const result = await $fetch('/api/files/upload', {
+      method: 'POST',
+      body: {
+        groupId: 'test-group',
+        content: 'hello world',
+        meta: { name: 'test.txt', mime: 'text/plain', type: 'document', version: 1 },
+      },
+    })
+
+    expect(result.id).toBeDefined()
+    expect(result.groupId).toBe('test-group')
+  })
+
+  it('lists files in a group', async () => {
+    const files = await $fetch('/api/files/list?groupId=test-group')
+
+    expect(files.length).toBeGreaterThanOrEqual(1)
+    expect(files[0].meta.name).toBe('test.txt')
+    expect(files[0].meta.mime).toBe('text/plain')
+    expect(files[0].groupId).toBe('test-group')
+  })
+
+  it('gets a file with data', async () => {
+    const files = await $fetch('/api/files/list?groupId=test-group')
+    const fileId = files[0].id
+
+    const file = await $fetch(`/api/files/get?groupId=test-group&id=${fileId}`)
+
+    expect(file.id).toBe(fileId)
+    expect(file.data).toBe('hello world')
+    expect(file.meta.name).toBe('test.txt')
+  })
+
+  it('updates file metadata', async () => {
+    const files = await $fetch('/api/files/list?groupId=test-group')
+    const fileId = files[0].id
+
+    await $fetch('/api/files/update-meta', {
+      method: 'POST',
+      body: { id: fileId, meta: { comment: 'updated comment' } },
+    })
+
+    const file = await $fetch(`/api/files/get?groupId=test-group&id=${fileId}`)
+    expect(file.meta.comment).toBe('updated comment')
+    // original fields preserved via defu merge
+    expect(file.meta.name).toBe('test.txt')
+  })
+
+  it('checks for duplicates', async () => {
+    const result = await $fetch('/api/files/check-duplicate?groupId=test-group&key=name&value=test.txt')
+    expect(result.exists).toBe(true)
+
+    const noResult = await $fetch('/api/files/check-duplicate?groupId=test-group&key=name&value=nonexistent.txt')
+    expect(noResult.exists).toBe(false)
+  })
+
+  it('handles versioning - getLatestVersions', async () => {
+    // Upload a v2 of the same file name
+    await $fetch('/api/files/upload', {
+      method: 'POST',
+      body: {
+        groupId: 'test-group',
+        content: 'hello world v2',
+        meta: { name: 'test.txt', mime: 'text/plain', type: 'document', version: 2 },
+      },
+    })
+
+    const latest = await $fetch('/api/files/latest-versions?groupId=test-group')
+
+    const testFile = latest.find((f: { meta: { name: string } }) => f.meta.name === 'test.txt')
+    expect(testFile).toBeDefined()
+    expect(testFile.meta.version).toBe(2)
+  })
+
+  it('uploads to different groups independently', async () => {
+    await $fetch('/api/files/upload', {
+      method: 'POST',
+      body: {
+        groupId: 'other-group',
+        content: 'other content',
+        meta: { name: 'other.pdf', mime: 'application/pdf', type: 'report', version: 1 },
+      },
+    })
+
+    const otherFiles = await $fetch('/api/files/list?groupId=other-group')
+    expect(otherFiles.length).toBe(1)
+    expect(otherFiles[0].meta.name).toBe('other.pdf')
+
+    // Original group still has its files
+    const testFiles = await $fetch('/api/files/list?groupId=test-group')
+    expect(testFiles.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('removes a file', async () => {
+    const files = await $fetch('/api/files/list?groupId=other-group')
+    const fileId = files[0].id
+
+    await $fetch('/api/files/remove', {
+      method: 'POST',
+      body: { groupId: 'other-group', id: fileId },
+    })
+
+    const remaining = await $fetch('/api/files/list?groupId=other-group')
+    expect(remaining.length).toBe(0)
+  })
+
+  it('returns empty list for unknown group', async () => {
+    const files = await $fetch('/api/files/list?groupId=nonexistent')
+    expect(files).toEqual([])
   })
 })
