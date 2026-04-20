@@ -1,3 +1,4 @@
+import { defineNitroPlugin } from 'nitropack/runtime';
 // @ts-expect-error virtual module
 import { storageName } from '#nuxt-filer-options';
 import { createUnstorageProvider } from '../providers/unstorage';
