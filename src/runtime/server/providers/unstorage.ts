@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { useStorage } from 'nitropack/runtime';
 import type {
   FileStorageProvider,
   FileMeta,
