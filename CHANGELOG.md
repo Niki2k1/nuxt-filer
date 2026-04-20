@@ -1,6 +1,22 @@
 # Changelog
 
 
+## v0.0.4
+
+[compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.3...v0.0.4)
+
+### 🩹 Fixes
+
+- Explicitly import useStorage in unstorage provider ([764a950](https://github.com/Niki2k1/nuxt-filer/commit/764a950))
+
+### 🏡 Chore
+
+- **release:** V0.0.3 ([c6b7b9d](https://github.com/Niki2k1/nuxt-filer/commit/c6b7b9d))
+
+### ❤️ Contributors
+
+- Niklas Lausch <niki@lauschig.net>
+
 ## v0.0.3
 
 [compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.2...v0.0.3)
