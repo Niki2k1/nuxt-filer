@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.0.3
+
+[compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.2...v0.0.3)
+
+### 🩹 Fixes
+
+- Explicitly import defineNitroPlugin in default-provider ([e557003](https://github.com/Niki2k1/nuxt-filer/commit/e557003))
+
+### ❤️ Contributors
+
+- Niklas Lausch <niki@lauschig.net>
+
 ## v0.0.2
 
 
