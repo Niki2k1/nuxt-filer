@@ -3,8 +3,24 @@ import {
   createResolver,
   addServerImports,
   addImports,
+  addServerHandler,
+  hasNuxtModule,
 } from '@nuxt/kit';
 import { consola } from 'consola';
+
+export interface FilerImageOptions {
+  /**
+   * Enable the @nuxt/image provider + IPX route. When `true` (the default),
+   * the integration registers only if `@nuxt/image` is also installed; when
+   * `false`, it is never registered. Set to `'force'` to register the routes
+   * even when `@nuxt/image` cannot be detected (mainly useful for tests).
+   */
+  enabled?: boolean | 'force';
+  /** Base path for the IPX endpoint. Default: `/_filer-ipx`. */
+  route?: string;
+  /** Name to register the @nuxt/image provider under. Default: `filer`. */
+  providerName?: string;
+}
 
 export interface ModuleOptions {
   /** Nitro storage mount name for binary file data. Default: 'documents' */
@@ -13,6 +29,8 @@ export interface ModuleOptions {
   storagePath?: string;
   /** Provider mode. 'unstorage' uses the built-in unstorage provider. 'custom' expects you to call setFileStorageProvider() in a Nitro plugin. Default: 'unstorage' */
   provider?: 'unstorage' | 'custom';
+  /** @nuxt/image integration. Set to `false` to disable, or pass an object to override defaults. */
+  image?: boolean | FilerImageOptions;
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -24,6 +42,7 @@ export default defineNuxtModule<ModuleOptions>({
     storageName: 'documents',
     storagePath: '.data/documents',
     provider: 'unstorage',
+    image: true,
   },
   setup(options, nuxt) {
     const resolver = createResolver(import.meta.url);
@@ -74,12 +93,55 @@ export default defineNuxtModule<ModuleOptions>({
     ]);
 
     // -------------------------------------------------------
+    // @nuxt/image integration
+    // -------------------------------------------------------
+    const imageOpt: FilerImageOptions =
+      typeof options.image === 'object' && options.image !== null
+        ? options.image
+        : {};
+    const imageEnabled =
+      options.image !== false && (imageOpt.enabled ?? true) !== false;
+    const ipxRoute = (imageOpt.route ?? '/_filer-ipx').replace(/\/+$/, '');
+    const providerName = imageOpt.providerName ?? 'filer';
+
+    const shouldRegisterImage =
+      imageEnabled
+      && (imageOpt.enabled === 'force' || hasNuxtModule('@nuxt/image'));
+
+    if (shouldRegisterImage) {
+      addServerHandler({
+        route: `${ipxRoute}/**`,
+        handler: resolver.resolve('./runtime/server/handlers/ipx'),
+      });
+
+      // Register the provider with @nuxt/image. Mutating nuxt.options.image
+      // before nitro:config is enough — @nuxt/image picks providers up there.
+      const imageConfig =
+        ((nuxt.options as Record<string, unknown>).image as
+          | { providers?: Record<string, unknown> }
+          | undefined) ?? {};
+      const providers = imageConfig.providers ?? {};
+      providers[providerName] = {
+        name: providerName,
+        provider: resolver.resolve('./runtime/image/provider'),
+        options: { baseURL: ipxRoute },
+      };
+      imageConfig.providers = providers;
+      (nuxt.options as Record<string, unknown>).image = imageConfig;
+    } else if (imageEnabled && options.image !== false) {
+      consola.info(
+        'nuxt-filer: @nuxt/image not detected — IPX integration disabled. Install `@nuxt/image` to enable optimized image variants.'
+      );
+    }
+
+    // -------------------------------------------------------
     // Nitro configuration: virtual module + storage mount + provider plugin
     // -------------------------------------------------------
     nuxt.hook('nitro:config', (nitroConfig) => {
-      // Virtual module with resolved options
       nitroConfig.virtual = nitroConfig.virtual || {};
       nitroConfig.virtual['#nuxt-filer-options'] = `export const storageName = ${JSON.stringify(options.storageName)}`;
+      // Always emit the image virtual; the handler is only wired when enabled.
+      nitroConfig.virtual['#nuxt-filer-image'] = `export const ipxRoute = ${JSON.stringify(ipxRoute)}`;
 
       // Auto-mount fs-lite storage when using the built-in unstorage provider
       if (options.provider === 'unstorage') {

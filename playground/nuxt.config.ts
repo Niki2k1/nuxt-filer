@@ -1,5 +1,5 @@
 export default defineNuxtConfig({
-  modules: ['../src/module'],
+  modules: ['../src/module', '@nuxt/image'],
   filer: {
     storageName: 'documents',
     storagePath: '.data/documents',

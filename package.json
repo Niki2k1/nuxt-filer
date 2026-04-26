@@ -55,16 +55,30 @@
   "devDependencies": {
     "@nuxt/devtools": "^3.2.4",
     "@nuxt/eslint-config": "^1.15.2",
+    "@nuxt/image": "^2.0.0",
     "@nuxt/module-builder": "^1.0.2",
     "@nuxt/schema": "^4.4.2",
     "@nuxt/test-utils": "^4.0.0",
     "@types/node": "latest",
     "changelogen": "^0.6.2",
     "eslint": "^10.1.0",
+    "ipx": "^3.1.1",
     "nuxt": "^4.4.2",
     "typescript": "~6.0.2",
     "vitest": "^4.1.2",
     "vue-tsc": "^3.2.6"
+  },
+  "peerDependencies": {
+    "@nuxt/image": "^2.0.0",
+    "ipx": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@nuxt/image": {
+      "optional": true
+    },
+    "ipx": {
+      "optional": true
+    }
   },
   "packageManager": "pnpm@10.33.0",
   "pnpm": {

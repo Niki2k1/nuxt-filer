@@ -27,8 +27,17 @@
     </div>
 
     <ul v-if="files.length" style="margin-top: 1rem">
-      <li v-for="file in files" :key="file.id">
+      <li v-for="file in files" :key="file.id" style="margin-bottom: 1rem">
         <strong>{{ file.meta.name }}</strong> ({{ file.meta.mime }}) — {{ file.id }}
+        <div v-if="file.meta.mime?.startsWith('image/')" style="margin-top: 0.5rem; display: flex; gap: 1rem">
+          <NuxtImg
+            provider="filer"
+            :src="`${file.groupId}/${file.id}`"
+            :modifiers="{ width: 96, height: 96, fit: 'cover', format: 'webp' }"
+            alt="thumbnail via IPX"
+          />
+          <code>provider=filer src={{ file.groupId }}/{{ file.id }}</code>
+        </div>
       </li>
     </ul>
   </div>

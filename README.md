@@ -15,6 +15,7 @@ File storage module for Nuxt. Provides a server-side `useFileStorage()` composab
 - **Zero-config default** — works out of the box with local filesystem storage, no database required
 - **Auto-imported** — `useFileStorage()`, types, and provider utilities are auto-imported in server context
 - **Group-based organization** — files are organized by `groupId` (project, ticket, order, etc.)
+- **`@nuxt/image` integration** — when `@nuxt/image` is installed, an IPX endpoint is wired up automatically so `<NuxtImg provider="filer" src="<groupId>/<id>" />` returns optimized variants of stored files
 
 ## Quick Setup
 
@@ -95,6 +96,39 @@ export default defineEventHandler(async (event) => {
 | `external?.sync(groupId, id)` | Sync with external system (if provider supports it) |
 | `external?.push(groupId, id, data, meta)` | Push to external system |
 | `external?.pull(groupId, ref)` | Pull from external system |
+
+## `@nuxt/image` Integration
+
+If `@nuxt/image` is installed alongside `nuxt-filer`, the module automatically registers a `filer` image provider and an IPX endpoint that pulls bytes from your storage provider, runs them through Sharp, and returns the result.
+
+```vue
+<template>
+  <NuxtImg
+    provider="filer"
+    :src="`${groupId}/${fileId}`"
+    width="200"
+    height="200"
+    fit="cover"
+    format="webp"
+  />
+</template>
+```
+
+Generated URLs look like `/_filer-ipx/w_200,h_200,fit_cover,format_webp/<groupId>/<fileId>` and are served with `cache-control: max-age=...`, `last-modified`, and `etag` for `if-modified-since` / `if-none-match` revalidation.
+
+The integration can be configured or turned off:
+
+```ts
+filer: {
+  image: {
+    enabled: true,            // false to disable; 'force' to register without @nuxt/image
+    route: '/_filer-ipx',     // base path for the IPX endpoint
+    providerName: 'filer',    // name used in <NuxtImg provider="..." />
+  },
+},
+```
+
+`@nuxt/image` and `ipx` are declared as optional peer dependencies — they only need to be installed if you want to use this integration.
 
 ## Custom Provider
 
