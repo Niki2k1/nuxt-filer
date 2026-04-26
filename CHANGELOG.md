@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.0.6
+
+[compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.5...v0.0.6)
+
+### 🩹 Fixes
+
+- Improve nuxt-image setup ([288a104](https://github.com/Niki2k1/nuxt-filer/commit/288a104))
+
+### ❤️ Contributors
+
+- Niklas Lausch <niki@lauschig.net>
+
 ## v0.0.5
 
 [compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.4...v0.0.5)
