@@ -1,10 +1,16 @@
 import { fileURLToPath } from 'node:url'
+import { rm } from 'node:fs/promises'
 import { describe, it, expect } from 'vitest'
 import { setup, $fetch } from '@nuxt/test-utils/e2e'
 
+const fixtureRoot = fileURLToPath(new URL('./fixtures/basic', import.meta.url))
+
+// Wipe persisted storage so tests start from a clean slate.
+await rm(fileURLToPath(new URL('../.data/test-documents', import.meta.url)), { recursive: true, force: true })
+
 describe('nuxt-filer', async () => {
   await setup({
-    rootDir: fileURLToPath(new URL('./fixtures/basic', import.meta.url)),
+    rootDir: fixtureRoot,
   })
 
   it('renders the index page', async () => {
@@ -36,14 +42,20 @@ describe('nuxt-filer', async () => {
   })
 
   it('gets a file with data', async () => {
-    const files = await $fetch('/api/files/list?groupId=test-group')
-    const fileId = files[0].id
+    const uploaded = await $fetch('/api/files/upload', {
+      method: 'POST',
+      body: {
+        groupId: 'get-test-group',
+        content: 'hello world',
+        meta: { name: 'get.txt', mime: 'text/plain', type: 'document', version: 1 },
+      },
+    })
 
-    const file = await $fetch(`/api/files/get?groupId=test-group&id=${fileId}`)
+    const file = await $fetch(`/api/files/get?groupId=get-test-group&id=${uploaded.id}`)
 
-    expect(file.id).toBe(fileId)
+    expect(file.id).toBe(uploaded.id)
     expect(file.data).toBe('hello world')
-    expect(file.meta.name).toBe('test.txt')
+    expect(file.meta.name).toBe('get.txt')
   })
 
   it('updates file metadata', async () => {
