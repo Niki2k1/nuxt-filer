@@ -5,6 +5,7 @@ import {
   addImports,
   addServerHandler,
   hasNuxtModule,
+  installModule,
 } from '@nuxt/kit';
 import { consola } from 'consola';
 
@@ -44,7 +45,7 @@ export default defineNuxtModule<ModuleOptions>({
     provider: 'unstorage',
     image: true,
   },
-  setup(options, nuxt) {
+  async setup(options, nuxt) {
     const resolver = createResolver(import.meta.url);
 
     // -------------------------------------------------------
@@ -114,8 +115,12 @@ export default defineNuxtModule<ModuleOptions>({
         handler: resolver.resolve('./runtime/server/handlers/ipx'),
       });
 
-      // Register the provider with @nuxt/image. Mutating nuxt.options.image
-      // before nitro:config is enough — @nuxt/image picks providers up there.
+      // Inject the provider into the user's image config. @nuxt/image
+      // snapshots `options.providers` during its own setup, so if it has
+      // already run (i.e. was listed before nuxt-filer in `modules`) we have
+      // to re-install it so the snapshot includes us. When it has not run
+      // yet, mutating the options is enough — its upcoming setup will see
+      // the provider naturally.
       const imageConfig =
         ((nuxt.options as Record<string, unknown>).image as
           | { providers?: Record<string, unknown> }
@@ -128,6 +133,13 @@ export default defineNuxtModule<ModuleOptions>({
       };
       imageConfig.providers = providers;
       (nuxt.options as Record<string, unknown>).image = imageConfig;
+
+      const imageAlreadyLoaded = (
+        nuxt.options as { _installedModules?: Array<{ meta?: { name?: string } }> }
+      )._installedModules?.some((m) => m.meta?.name === '@nuxt/image');
+      if (imageAlreadyLoaded) {
+        await installModule('@nuxt/image');
+      }
     } else if (imageEnabled && options.image !== false) {
       consola.info(
         'nuxt-filer: @nuxt/image not detected — IPX integration disabled. Install `@nuxt/image` to enable optimized image variants.'
