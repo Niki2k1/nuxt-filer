@@ -1,4 +1,5 @@
 import type { ProviderGetImage } from '@nuxt/image';
+import { joinURL } from 'ufo';
 
 interface FilerProviderOptions {
   baseURL?: string;
@@ -7,27 +8,44 @@ interface FilerProviderOptions {
 const operationsGenerator = (
   modifiers: Record<string, string | number | boolean | undefined>
 ): string => {
-  const ops: string[] = [];
-  for (const [key, value] of Object.entries(modifiers)) {
-    if (value === undefined || value === null || value === '' || value === false) continue;
-    ops.push(`${key}_${value}`);
+  const out: string[] = [];
+  // Match @nuxt/image's built-in IPX provider: width+height collapses to resize.
+  if (modifiers.width && modifiers.height) {
+    modifiers.resize = `${modifiers.width}x${modifiers.height}`;
+    delete modifiers.width;
+    delete modifiers.height;
   }
-  return ops.length ? ops.join(',') : '_';
+  const keyMap: Record<string, string> = {
+    format: 'f',
+    width: 'w',
+    height: 'h',
+    resize: 's',
+    quality: 'q',
+    background: 'b',
+    position: 'pos',
+  };
+  for (const [rawKey, value] of Object.entries(modifiers)) {
+    if (value === undefined || value === null || value === '' || value === false) continue;
+    const key = keyMap[rawKey] ?? rawKey;
+    out.push(`${key}_${value}`);
+  }
+  return out.length ? out.join(',') : '_';
 };
 
 export const getImage: ProviderGetImage = (
   src: string,
-  { modifiers = {}, baseURL }: { modifiers?: Record<string, unknown>; baseURL?: string } = {},
-  // ctx is provided by @nuxt/image but unused here
+  { modifiers = {}, baseURL = '/_filer-ipx' }: { modifiers?: Record<string, unknown>; baseURL?: string } = {},
 ) => {
-  const root = (baseURL ?? '/_filer-ipx').replace(/\/+$/, '');
   const ops = operationsGenerator(
     modifiers as Record<string, string | number | boolean | undefined>
   );
-  const path = src.replace(/^\/+/, '');
-  return { url: `${root}/${ops}/${path}` };
+  return { url: joinURL(baseURL, ops, src.replace(/^\/+/, '')) };
 };
 
-export const validateDomains = false;
+export default () => ({
+  getImage,
+  validateDomains: false,
+  supportsAlias: false,
+});
 
 export type { FilerProviderOptions };
