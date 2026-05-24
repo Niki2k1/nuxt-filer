@@ -135,4 +135,25 @@ describe('nuxt-filer', async () => {
     const files = await $fetch('/api/files/list?groupId=nonexistent')
     expect(files).toEqual([])
   })
+
+  // Regression: the previous default driver (unstorage's fs-lite) sometimes
+  // failed first-time writes to a brand-new key path with ENOENT because its
+  // userspace `ensuredir` recursion is not as reliable as the kernel's
+  // recursive mkdir. Group IDs with `:` map to nested directories.
+  it('first-time upload to a brand-new nested group succeeds', async () => {
+    const uniqueGroup = `project:first-${Date.now()}`
+    const result = await $fetch('/api/files/upload', {
+      method: 'POST',
+      body: {
+        groupId: uniqueGroup,
+        content: 'first',
+        meta: { name: 'a.txt', mime: 'text/plain', type: 'document', version: 1 },
+      },
+    })
+    expect(result.id).toBeDefined()
+
+    const files = await $fetch(`/api/files/list?groupId=${encodeURIComponent(uniqueGroup)}`)
+    expect(files.length).toBe(1)
+    expect(files[0].meta.name).toBe('a.txt')
+  })
 })

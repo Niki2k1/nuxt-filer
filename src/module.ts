@@ -151,20 +151,24 @@ export default defineNuxtModule<ModuleOptions>({
     // -------------------------------------------------------
     nuxt.hook('nitro:config', (nitroConfig) => {
       nitroConfig.virtual = nitroConfig.virtual || {};
-      nitroConfig.virtual['#nuxt-filer-options'] = `export const storageName = ${JSON.stringify(options.storageName)}`;
+      nitroConfig.virtual['#nuxt-filer-options'] = [
+        `export const storageName = ${JSON.stringify(options.storageName)};`,
+        `export const storagePath = ${JSON.stringify(options.storagePath)};`,
+      ].join('\n');
       // Always emit the image virtual; the handler is only wired when enabled.
       nitroConfig.virtual['#nuxt-filer-image'] = `export const ipxRoute = ${JSON.stringify(ipxRoute)}`;
 
-      // Auto-mount fs-lite storage when using the built-in unstorage provider
+      // Auto-mount filesystem storage when using the built-in unstorage
+      // provider. We mount via a Nitro plugin that ships our own fs driver
+      // (rather than `nitroConfig.storage` with `driver: 'fsLite'`) because
+      // unstorage's fs-lite relies on a userspace `ensuredir` recursion that
+      // intermittently fails with ENOENT on first writes to a new key path.
+      // Our driver uses the kernel's atomic `mkdir(..., { recursive: true })`.
       if (options.provider === 'unstorage') {
-        nitroConfig.storage = nitroConfig.storage || {};
-        nitroConfig.storage[options.storageName!] = {
-          driver: 'fsLite',
-          base: options.storagePath,
-        };
-
-        // Register the default provider plugin
         nitroConfig.plugins = nitroConfig.plugins || [];
+        nitroConfig.plugins.push(
+          resolver.resolve('./runtime/server/plugins/default-storage')
+        );
         nitroConfig.plugins.push(
           resolver.resolve('./runtime/server/plugins/default-provider')
         );
