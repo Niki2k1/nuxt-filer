@@ -1,6 +1,19 @@
 # Changelog
 
 
+## v0.0.8
+
+[compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.7...v0.0.8)
+
+### 🩹 Fixes
+
+- Ship custom fs driver to avoid first-write ENOENT ([23b6dbc](https://github.com/Niki2k1/nuxt-filer/commit/23b6dbc))
+- Align IPX modifier keys with @nuxt/image defaults ([e261c07](https://github.com/Niki2k1/nuxt-filer/commit/e261c07))
+
+### ❤️ Contributors
+
+- Niklas Lausch <niki@lauschig.net>
+
 ## v0.0.7
 
 [compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.6...v0.0.7)

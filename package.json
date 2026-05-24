@@ -1,6 +1,6 @@
 {
   "name": "nuxt-filer",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "File storage module for Nuxt",
   "repository": {
     "type": "git",
