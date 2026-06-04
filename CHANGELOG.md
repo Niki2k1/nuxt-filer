@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.0.9
+
+[compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.8...v0.0.9)
+
+### 🚀 Enhancements
+
+- Upload-time Sharp image processing ([b0617c7](https://github.com/Niki2k1/nuxt-filer/commit/b0617c7))
+
+### ❤️ Contributors
+
+- Niklas Lausch <niki@lauschig.net>
+
 ## v0.0.8
 
 [compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.7...v0.0.8)
