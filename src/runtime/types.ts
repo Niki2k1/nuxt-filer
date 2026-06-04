@@ -8,6 +8,54 @@ export interface FileMeta {
   [key: string]: unknown;
 }
 
+/** Output image format for {@link transformImage}. */
+export type ImageFormat = 'webp' | 'png' | 'jpeg' | 'avif' | 'gif';
+
+/**
+ * Options for upload-time image processing, backed by the optional `sharp`
+ * peer dependency. Passed via `useFileStorage().upload(.., { transform })` or
+ * to the standalone `transformImage()` util.
+ */
+export interface ImageTransformOptions {
+  /** Target width in px. Combined with `fit` to bound the image. */
+  width?: number;
+  /** Target height in px. Combined with `fit` to bound the image. */
+  height?: number;
+  /**
+   * How the image is resized to fit `width`/`height`. Mirrors sharp's `fit`.
+   * Default: `'inside'` (preserve aspect ratio, fit within the box).
+   */
+  fit?: 'cover' | 'contain' | 'fill' | 'inside' | 'outside';
+  /** Never scale the image up beyond its original size. Default: `true`. */
+  withoutEnlargement?: boolean;
+  /** Output format. Default: keep the input's format. */
+  format?: ImageFormat;
+  /** Output quality (1-100) for lossy formats (webp/jpeg/avif). */
+  quality?: number;
+  /**
+   * Preserve every frame of multi-frame inputs (animated webp/gif). Default:
+   * `true`; harmless for static images. Animation is only retained when the
+   * output `format` is animation-capable (`webp`/`gif`).
+   */
+  animated?: boolean;
+  /** Background used when flattening transparency (e.g. for `contain`/jpeg). */
+  background?: string;
+}
+
+/** Result of {@link transformImage}: the processed bytes plus resolved metadata. */
+export interface ImageTransformResult {
+  /** The processed image bytes. */
+  data: Buffer;
+  /** MIME type of the processed image, e.g. `image/webp`. */
+  mime: string;
+  /** Resolved output format, e.g. `webp`. */
+  format: string;
+  /** Width of the processed image in px, if sharp could determine it. */
+  width?: number;
+  /** Height of the processed image in px, if sharp could determine it. */
+  height?: number;
+}
+
 export interface ExternalRef {
   /** External system identifier, e.g. 'jira', 'sharepoint' */
   source: string;

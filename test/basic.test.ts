@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 import { rm } from 'node:fs/promises'
 import { describe, it, expect } from 'vitest'
+import sharp from 'sharp'
 import { setup, $fetch } from '@nuxt/test-utils/e2e'
 
 const fixtureRoot = fileURLToPath(new URL('./fixtures/basic', import.meta.url))
@@ -134,6 +135,35 @@ describe('nuxt-filer', async () => {
   it('returns empty list for unknown group', async () => {
     const files = await $fetch('/api/files/list?groupId=nonexistent')
     expect(files).toEqual([])
+  })
+
+  it('processes an image at upload time via the transform option', async () => {
+    const png = await sharp({
+      create: {
+        width: 256,
+        height: 256,
+        channels: 4,
+        background: { r: 0, g: 128, b: 255, alpha: 1 },
+      },
+    })
+      .png()
+      .toBuffer()
+
+    const result = await $fetch('/api/files/upload-image', {
+      method: 'POST',
+      body: {
+        groupId: 'image-group',
+        content: png.toString('base64'),
+        meta: { name: 'icon.png', mime: 'image/png', type: 'image', version: 1 },
+        transform: { width: 64, format: 'webp' },
+      },
+    })
+
+    expect(result.id).toBeDefined()
+    // Upload-time processing rewrites the stored mime + dimensions.
+    expect(result.meta.mime).toBe('image/webp')
+    expect(result.meta.width).toBe(64)
+    expect(result.meta.height).toBe(64)
   })
 
   // Regression: the previous default driver (unstorage's fs-lite) sometimes

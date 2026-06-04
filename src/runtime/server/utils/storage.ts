@@ -4,10 +4,20 @@ import type {
   StoredFile,
   ExternalRef,
   FileStorageProvider,
+  ImageTransformOptions,
+  ImageTransformResult,
 } from '../../../runtime/types';
 import { useFileStorageProvider } from '../provider';
+import { transformImage } from './image';
 
-export type { FileMeta, StoredFile, ExternalRef, FileStorageProvider };
+export type {
+  FileMeta,
+  StoredFile,
+  ExternalRef,
+  FileStorageProvider,
+  ImageTransformOptions,
+  ImageTransformResult,
+};
 
 export const useFileStorage = () => {
   const provider = useFileStorageProvider();
@@ -15,9 +25,23 @@ export const useFileStorage = () => {
   async function upload(
     groupId: string,
     data: Buffer | Uint8Array,
-    options: { meta?: FileMeta } = {}
+    options: { meta?: FileMeta; transform?: ImageTransformOptions } = {}
   ): Promise<string> {
-    const { id } = await provider.create(groupId, data, options.meta);
+    let payload = data;
+
+    // Optional upload-time image processing (requires the `sharp` peer dep).
+    // The stored bytes and the metadata's mime/dimensions reflect the result.
+    if (options.transform) {
+      const result = await transformImage(data, options.transform);
+      payload = result.data;
+      if (options.meta) {
+        options.meta.mime = result.mime;
+        options.meta.width = result.width;
+        options.meta.height = result.height;
+      }
+    }
+
+    const { id } = await provider.create(groupId, payload, options.meta);
     return id;
   }
 

@@ -16,6 +16,13 @@
       </button>
     </div>
 
+    <div style="margin-top: 0.5rem">
+      <label>
+        <input v-model="processImage" type="checkbox" >
+        Process image on upload (resize to 128px, convert to webp via sharp)
+      </label>
+    </div>
+
     <div v-if="uploadResult" style="margin-top: 1rem; color: green">
       Uploaded: {{ uploadResult.id }}
     </div>
@@ -46,6 +53,7 @@
 <script setup lang="ts">
 const groupId = ref('test-group');
 const selectedFile = ref<File | null>(null);
+const processImage = ref(false);
 const uploadResult = ref<{ id: string } | null>(null);
 const files = ref<Array<{ id: string; groupId: string; meta: { name: string; mime: string }; createdAt?: string; updatedAt?: string }>>([]);
 
@@ -62,6 +70,7 @@ async function upload() {
 
   uploadResult.value = await $fetch(`/api/files/${groupId.value}`, {
     method: 'POST',
+    query: processImage.value ? { process: '1' } : undefined,
     body: formData,
   });
 }

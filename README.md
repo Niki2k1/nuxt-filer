@@ -16,6 +16,7 @@ File storage module for Nuxt. Provides a server-side `useFileStorage()` composab
 - **Auto-imported** — `useFileStorage()`, types, and provider utilities are auto-imported in server context
 - **Group-based organization** — files are organized by `groupId` (project, ticket, order, etc.)
 - **`@nuxt/image` integration** — when `@nuxt/image` is installed, an IPX endpoint is wired up automatically so `<NuxtImg provider="filer" src="<groupId>/<id>" />` returns optimized variants of stored files
+- **Upload-time image processing** — optionally run images through Sharp when storing them (resize, format-convert, optimize, preserve animation) via a per-call `transform` option or the standalone `transformImage()` util
 
 ## Quick Setup
 
@@ -76,11 +77,49 @@ export default defineEventHandler(async (event) => {
 })
 ```
 
+### Upload-time image processing
+
+Pass a `transform` option to `upload()` to process an image **before it is stored** — useful for normalizing user uploads or rehosted remote images to a capped size and compact format. The processed bytes are what gets stored, and the file's `meta.mime` / `meta.width` / `meta.height` are updated to match the result.
+
+```ts
+const id = await storage.upload(groupId, file.data, {
+  meta: { name: file.filename!, mime: file.type!, type: 'image', version: 1 },
+  transform: {
+    width: 128,
+    height: 128,
+    format: 'webp', // convert to webp
+    // fit: 'inside' (default), withoutEnlargement: true (default),
+    // quality, background, animated (default true)
+  },
+})
+```
+
+You can also call the util directly (e.g. for images fetched server-side):
+
+```ts
+const res = await transformImage(buffer, { width: 64, format: 'webp' })
+// res: { data: Buffer, mime: 'image/webp', format: 'webp', width: 64, height: 64 }
+```
+
+**`transform` / `transformImage()` options**
+
+| Option | Description |
+|---|---|
+| `width`, `height` | Target box in px (combined with `fit`) |
+| `fit` | Resize fit mode (`inside` default, or `cover`/`contain`/`fill`/`outside`) |
+| `withoutEnlargement` | Never scale up beyond the original (default `true`) |
+| `format` | Output format: `webp` / `png` / `jpeg` / `avif` / `gif` (default: keep input) |
+| `quality` | Output quality `1-100` for lossy formats |
+| `animated` | Preserve all frames of animated inputs (default `true`; only retained when `format` is `webp`/`gif`) |
+| `background` | Background used when flattening transparency |
+
+> Image processing requires the optional [`sharp`](https://sharp.pixelplumbing.com/) peer dependency. Install it (`npm i sharp`) only if you use `transform` / `transformImage()` — calling them without `sharp` throws a clear error. Without a `transform`, `upload()` stores the raw bytes unchanged and needs no extra dependency.
+
 ### `useFileStorage()` API
 
 | Method | Description |
 |---|---|
-| `upload(groupId, data, options?)` | Store a file, returns its ID |
+| `upload(groupId, data, options?)` | Store a file, returns its ID. `options.transform` runs the bytes through Sharp first (see above) |
 | `list(groupId)` | List all files in a group |
 | `get(groupId, id)` | Get a file with data and metadata |
 | `getData(groupId, id)` | Get raw binary data only |

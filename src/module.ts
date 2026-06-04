@@ -56,6 +56,10 @@ export default defineNuxtModule<ModuleOptions>({
         name: 'useFileStorage',
         from: resolver.resolve('./runtime/server/utils/storage'),
       },
+      {
+        name: 'transformImage',
+        from: resolver.resolve('./runtime/server/utils/image'),
+      },
     ]);
 
     // -------------------------------------------------------
@@ -91,6 +95,9 @@ export default defineNuxtModule<ModuleOptions>({
         from: typesSpecifier,
         type: true,
       },
+      { name: 'ImageFormat', from: typesSpecifier, type: true },
+      { name: 'ImageTransformOptions', from: typesSpecifier, type: true },
+      { name: 'ImageTransformResult', from: typesSpecifier, type: true },
     ]);
 
     // -------------------------------------------------------
