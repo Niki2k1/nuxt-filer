@@ -1,4 +1,4 @@
-import { defineEventHandler } from 'h3';
+import { defineEventHandler, useBase, type EventHandler } from 'h3';
 import { createIPX, createIPXH3Handler, type IPX, type IPXStorage } from 'ipx';
 // @ts-expect-error virtual module injected by the module
 import { ipxRoute } from '#nuxt-filer-image';
@@ -41,24 +41,20 @@ const filerStorage: IPXStorage = {
   },
 };
 
-let _handler: ReturnType<typeof createIPXH3Handler> | null = null;
+let _handler: EventHandler | null = null;
 let _ipx: IPX | null = null;
-function getHandler() {
+function getHandler(): EventHandler {
   if (!_handler) {
     _ipx = createIPX({ storage: filerStorage });
-    _handler = createIPXH3Handler(_ipx);
+    // IPX expects to see `/<modifiers>/<groupId>/<fileId>`, so strip the
+    // configured base prefix first. We delegate to h3's `useBase` rather than
+    // assigning `event.path` — `event.path` is a getter-only accessor (it
+    // reads back `event._path || req.url`), so writing to it throws
+    // "Cannot set property path ... which has only a getter". `useBase`
+    // rewrites `_path`/`req.url` for the inner handler and restores them after.
+    _handler = useBase(ipxRoute, createIPXH3Handler(_ipx));
   }
   return _handler;
 }
 
-export default defineEventHandler((event) => {
-  // Strip the configured base prefix so IPX sees the URL it expects:
-  // `/<modifiers>/<groupId>/<fileId>`.
-  const original = event.path;
-  let sub = original.startsWith(ipxRoute)
-    ? original.slice((ipxRoute as string).length)
-    : original;
-  if (!sub.startsWith('/')) sub = `/${sub}`;
-  event.path = sub;
-  return getHandler()(event);
-});
+export default defineEventHandler((event) => getHandler()(event));
