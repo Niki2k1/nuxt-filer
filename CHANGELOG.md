@@ -1,6 +1,18 @@
 # Changelog
 
 
+## v0.0.11
+
+[compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.9...v0.0.11)
+
+### 🩹 Fixes
+
+- Use useBase to strip IPX route prefix instead of writing event.path ([0fae89d](https://github.com/Niki2k1/nuxt-filer/commit/0fae89d))
+
+### ❤️ Contributors
+
+- Niklas Lausch <niki@lauschig.net>
+
 ## v0.0.9
 
 [compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.8...v0.0.9)
