@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { rm } from 'node:fs/promises'
 import { describe, it, expect } from 'vitest'
 import sharp from 'sharp'
-import { setup, $fetch } from '@nuxt/test-utils/e2e'
+import { setup, $fetch, fetch } from '@nuxt/test-utils/e2e'
 
 const fixtureRoot = fileURLToPath(new URL('./fixtures/basic', import.meta.url))
 
@@ -57,6 +57,70 @@ describe('nuxt-filer', async () => {
     expect(file.id).toBe(uploaded.id)
     expect(file.data).toBe('hello world')
     expect(file.meta.name).toBe('get.txt')
+  })
+
+  it('serves a stored file via sendStoredFile', async () => {
+    const uploaded = await $fetch('/api/files/upload', {
+      method: 'POST',
+      body: {
+        groupId: 'download-group',
+        content: 'raw download body',
+        meta: { name: 'résumé.txt', mime: 'text/plain', type: 'document', version: 1 },
+      },
+    })
+
+    const res = await fetch(`/api/files/download?groupId=download-group&id=${uploaded.id}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('text/plain')
+    expect(res.headers.get('content-length')).toBe(String(Buffer.byteLength('raw download body')))
+    expect(res.headers.get('etag')).toBeTruthy()
+    expect(res.headers.get('last-modified')).toBeTruthy()
+    // inline by default; UTF-8 filename carried in filename*.
+    const disposition = res.headers.get('content-disposition')!
+    expect(disposition).toContain('inline')
+    expect(disposition).toContain("filename*=UTF-8''r%C3%A9sum%C3%A9.txt")
+    expect(await res.text()).toBe('raw download body')
+  })
+
+  it('opt-in attachment disposition forces a download', async () => {
+    const uploaded = await $fetch('/api/files/upload', {
+      method: 'POST',
+      body: {
+        groupId: 'download-group',
+        content: 'attachment body',
+        meta: { name: 'report.pdf', mime: 'application/pdf', type: 'report', version: 1 },
+      },
+    })
+
+    const res = await fetch(`/api/files/download?groupId=download-group&id=${uploaded.id}&disposition=attachment`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-disposition')).toContain('attachment')
+  })
+
+  it('revalidates with 304 when if-none-match matches the etag', async () => {
+    const uploaded = await $fetch('/api/files/upload', {
+      method: 'POST',
+      body: {
+        groupId: 'download-group',
+        content: 'cacheable body',
+        meta: { name: 'cache.txt', mime: 'text/plain', type: 'document', version: 1 },
+      },
+    })
+
+    const first = await fetch(`/api/files/download?groupId=download-group&id=${uploaded.id}`)
+    const etag = first.headers.get('etag')!
+    expect(etag).toBeTruthy()
+
+    const second = await fetch(`/api/files/download?groupId=download-group&id=${uploaded.id}`, {
+      headers: { 'if-none-match': etag },
+    })
+    expect(second.status).toBe(304)
+    expect(await second.text()).toBe('')
+  })
+
+  it('returns 404 for a missing file', async () => {
+    const res = await fetch('/api/files/download?groupId=download-group&id=does-not-exist')
+    expect(res.status).toBe(404)
   })
 
   it('updates file metadata', async () => {

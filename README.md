@@ -136,6 +136,30 @@ const res = await transformImage(buffer, { width: 64, format: 'webp' })
 | `external?.push(groupId, id, data, meta)` | Push to external system |
 | `external?.pull(groupId, ref)` | Pull from external system |
 
+### Serving raw files with `sendStoredFile()`
+
+The IPX route serves **images** with full HTTP caching. For everything else — original PDFs, non-image downloads, the unprocessed bytes of any file — `sendStoredFile()` streams a stored file back through an H3 event with the same revalidation story.
+
+```ts
+// server/api/files/[groupId]/[id].get.ts
+export default defineEventHandler((event) => {
+  const { groupId, id } = getRouterParams(event)
+  return sendStoredFile(event, groupId, id) // 404 if missing
+})
+```
+
+It sets `content-type` from `meta.mime`, a `content-disposition` filename from `meta.name`, and `cache-control` / `last-modified` / `etag`, honoring `if-modified-since` / `if-none-match` (`304`) — just like the IPX route. `HEAD` requests get the headers without a body.
+
+```ts
+sendStoredFile(event, groupId, id, {
+  disposition: 'attachment', // force a download ('inline' is the default)
+  filename: 'invoice-2026.pdf', // override the download name (default: meta.name)
+  maxAge: 3600, // cache-control max-age in seconds (default: 1 year; 0 = no-cache)
+})
+```
+
+`sendStoredFile` is auto-imported in your server routes — no need to import it.
+
 ## `@nuxt/image` Integration
 
 If `@nuxt/image` is installed alongside `nuxt-filer`, the module automatically registers a `filer` image provider and an IPX endpoint that pulls bytes from your storage provider, runs them through Sharp, and returns the result.
