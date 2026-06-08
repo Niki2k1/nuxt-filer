@@ -60,6 +60,10 @@ export default defineNuxtModule<ModuleOptions>({
         name: 'transformImage',
         from: resolver.resolve('./runtime/server/utils/image'),
       },
+      {
+        name: 'sendStoredFile',
+        from: resolver.resolve('./runtime/server/utils/send'),
+      },
     ]);
 
     // -------------------------------------------------------
