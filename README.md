@@ -169,6 +169,65 @@ filer: {
 
 `@nuxt/image` and `ipx` are declared as optional peer dependencies — they only need to be installed if you want to use this integration.
 
+## Prisma provider
+
+The built-in `prisma` provider stores file **metadata in your database** (via your own Prisma client) and **binary data in the fs storage mount** (the same `storageName`/`storagePath` machinery the `unstorage` provider uses). The module wires the Nitro plugin for you — you only point it at your client and model.
+
+Add a model to your Prisma schema. The generic shape:
+
+```prisma
+model FilerFile {
+  id        String   @id @default(uuid())
+  groupId   String
+  metadata  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([groupId])
+}
+```
+
+Then configure the provider:
+
+```ts
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ['nuxt-filer'],
+  filer: {
+    provider: 'prisma',
+    prisma: {
+      // Module exporting your Prisma client, resolvable from the Nitro server.
+      clientPath: '~~/server/utils/prisma',
+      // Export holding the client. Default: 'prisma' (use 'default' for a default export).
+      clientExport: 'prisma',
+      // Prisma model delegate name on the client.
+      model: 'filerFile',
+    },
+  },
+})
+```
+
+The column names are configurable, so the provider adapts to an existing schema rather than forcing one. For example, a table that keys files by `serviceorderId` and names its JSON column `metadata` on a model called `files`:
+
+```ts
+filer: {
+  provider: 'prisma',
+  prisma: {
+    clientPath: '~~/server/utils/prisma',
+    model: 'files',
+    groupIdColumn: 'serviceorderId',   // default: 'groupId'
+    metadataColumn: 'metadata',        // default: 'metadata'
+    findByMeta: 'postgres-jsonpath',   // default: 'scan' (portable); Postgres-only opt-in
+  },
+}
+```
+
+`findByMeta` controls how metadata lookups run: `'scan'` (default) fetches rows by group and filters in JS — portable across every database Prisma supports; `'postgres-jsonpath'` pushes the filter into a JSON-path query for efficiency, but only works on Postgres.
+
+`@prisma/client` is declared as an optional peer dependency — install it (and generate your client) only if you use this provider.
+
+If you need behaviour the built-in provider doesn't cover (FK cascades, upload hooks, external blob storage), use a [custom provider](#custom-provider) instead — `createPrismaProvider` is also exported and auto-imported, so you can build on it.
+
 ## Custom Provider
 
 For advanced use cases (database-backed metadata, S3 storage, external file sync), implement the `FileStorageProvider` interface and register it in a Nitro plugin:

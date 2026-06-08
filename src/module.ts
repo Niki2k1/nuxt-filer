@@ -23,13 +23,44 @@ export interface FilerImageOptions {
   providerName?: string;
 }
 
+/**
+ * Configuration for the built-in `prisma` provider. Metadata is stored in a
+ * database table via your Prisma client; binary data reuses the module's fs
+ * storage mount (`storageName`/`storagePath`).
+ */
+export interface FilerPrismaOptions {
+  /**
+   * Path to a module exporting your Prisma client, resolvable from the Nitro
+   * server (e.g. `'~~/server/utils/prisma'`).
+   */
+  clientPath: string;
+  /**
+   * Name of the export holding the client. Default: `'prisma'`. Use `'default'`
+   * for a default export.
+   */
+  clientExport?: string;
+  /** Prisma model delegate name on the client, e.g. `'filerFile'`. */
+  model: string;
+  /** Column holding the group id. Default: `'groupId'`. */
+  groupIdColumn?: string;
+  /** JSON column holding the file metadata. Default: `'metadata'`. */
+  metadataColumn?: string;
+  /**
+   * findByMeta strategy. `'scan'` (default) is portable; `'postgres-jsonpath'`
+   * pushes the filter into a JSON-path query (Postgres only).
+   */
+  findByMeta?: 'scan' | 'postgres-jsonpath';
+}
+
 export interface ModuleOptions {
   /** Nitro storage mount name for binary file data. Default: 'documents' */
   storageName?: string;
   /** Base path for the default fs-lite storage driver. Default: '.data/documents' */
   storagePath?: string;
-  /** Provider mode. 'unstorage' uses the built-in unstorage provider. 'custom' expects you to call setFileStorageProvider() in a Nitro plugin. Default: 'unstorage' */
-  provider?: 'unstorage' | 'custom';
+  /** Provider mode. 'unstorage' uses the built-in unstorage provider. 'prisma' stores metadata in a database via your Prisma client (configure via `prisma`). 'custom' expects you to call setFileStorageProvider() in a Nitro plugin. Default: 'unstorage' */
+  provider?: 'unstorage' | 'prisma' | 'custom';
+  /** Configuration for the built-in `prisma` provider. Required when `provider` is `'prisma'`. */
+  prisma?: FilerPrismaOptions;
   /** @nuxt/image integration. Set to `false` to disable, or pass an object to override defaults. */
   image?: boolean | FilerImageOptions;
 }
@@ -78,6 +109,10 @@ export default defineNuxtModule<ModuleOptions>({
       {
         name: 'createUnstorageProvider',
         from: resolver.resolve('./runtime/server/providers/unstorage'),
+      },
+      {
+        name: 'createPrismaProvider',
+        from: resolver.resolve('./runtime/server/providers/prisma'),
       },
     ]);
 
@@ -156,28 +191,65 @@ export default defineNuxtModule<ModuleOptions>({
     // -------------------------------------------------------
     // Nitro configuration: virtual module + storage mount + provider plugin
     // -------------------------------------------------------
+    if (options.provider === 'prisma' && !options.prisma?.clientPath) {
+      throw new Error(
+        "nuxt-filer: provider is 'prisma' but `filer.prisma.clientPath` is not set. Point it at the module that exports your Prisma client (e.g. '~~/server/utils/prisma')."
+      );
+    }
+    if (options.provider === 'prisma' && !options.prisma?.model) {
+      throw new Error(
+        "nuxt-filer: provider is 'prisma' but `filer.prisma.model` is not set. Set it to your Prisma model delegate name (e.g. 'filerFile')."
+      );
+    }
+
     nuxt.hook('nitro:config', (nitroConfig) => {
+      const prisma = options.prisma;
       nitroConfig.virtual = nitroConfig.virtual || {};
       nitroConfig.virtual['#nuxt-filer-options'] = [
         `export const storageName = ${JSON.stringify(options.storageName)};`,
         `export const storagePath = ${JSON.stringify(options.storagePath)};`,
+        `export const prismaModel = ${JSON.stringify(prisma?.model)};`,
+        `export const prismaGroupIdColumn = ${JSON.stringify(prisma?.groupIdColumn ?? 'groupId')};`,
+        `export const prismaMetadataColumn = ${JSON.stringify(prisma?.metadataColumn ?? 'metadata')};`,
+        `export const prismaFindByMeta = ${JSON.stringify(prisma?.findByMeta ?? 'scan')};`,
       ].join('\n');
       // Always emit the image virtual; the handler is only wired when enabled.
       nitroConfig.virtual['#nuxt-filer-image'] = `export const ipxRoute = ${JSON.stringify(ipxRoute)}`;
 
-      // Auto-mount filesystem storage when using the built-in unstorage
-      // provider. We mount via a Nitro plugin that ships our own fs driver
-      // (rather than `nitroConfig.storage` with `driver: 'fsLite'`) because
-      // unstorage's fs-lite relies on a userspace `ensuredir` recursion that
-      // intermittently fails with ENOENT on first writes to a new key path.
-      // Our driver uses the kernel's atomic `mkdir(..., { recursive: true })`.
-      if (options.provider === 'unstorage') {
+      // Auto-mount filesystem storage for the built-in providers. We mount via
+      // a Nitro plugin that ships our own fs driver (rather than
+      // `nitroConfig.storage` with `driver: 'fsLite'`) because unstorage's
+      // fs-lite relies on a userspace `ensuredir` recursion that intermittently
+      // fails with ENOENT on first writes to a new key path. Our driver uses
+      // the kernel's atomic `mkdir(..., { recursive: true })`. The `prisma`
+      // provider keeps binary data here too — only metadata goes to the DB.
+      if (options.provider === 'unstorage' || options.provider === 'prisma') {
         nitroConfig.plugins = nitroConfig.plugins || [];
         nitroConfig.plugins.push(
           resolver.resolve('./runtime/server/plugins/default-storage')
         );
+      }
+
+      if (options.provider === 'unstorage') {
+        nitroConfig.plugins = nitroConfig.plugins || [];
         nitroConfig.plugins.push(
           resolver.resolve('./runtime/server/plugins/default-provider')
+        );
+      }
+
+      if (options.provider === 'prisma' && prisma) {
+        // Re-export the user's Prisma client from a virtual so the provider
+        // plugin can import it without a static path. Mirrors the other
+        // `#nuxt-filer-*` virtuals.
+        const clientExport = prisma.clientExport ?? 'prisma';
+        nitroConfig.virtual['#nuxt-filer-prisma'] =
+          clientExport === 'default'
+            ? `import client from ${JSON.stringify(prisma.clientPath)};\nexport { client };`
+            : `export { ${clientExport} as client } from ${JSON.stringify(prisma.clientPath)};`;
+
+        nitroConfig.plugins = nitroConfig.plugins || [];
+        nitroConfig.plugins.push(
+          resolver.resolve('./runtime/server/plugins/prisma-provider')
         );
       }
     });
