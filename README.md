@@ -169,6 +169,68 @@ filer: {
 
 `@nuxt/image` and `ipx` are declared as optional peer dependencies — they only need to be installed if you want to use this integration.
 
+## Drizzle provider
+
+The built-in `drizzle` provider stores file **metadata in your database** (via your Drizzle `db` + table) and **binary data in the fs storage mount** (the same `storageName`/`storagePath` machinery the `unstorage` provider uses). It targets async drivers (postgres-js, node-postgres, libsql, mysql2, neon, …) and uses Drizzle's core query builder, which is stable across Drizzle v0.x and v1.
+
+Add a table to your schema. A generic Postgres example:
+
+```ts
+// server/db/schema.ts
+import { pgTable, text, jsonb, timestamp, index } from 'drizzle-orm/pg-core'
+
+export const filerFiles = pgTable('filer_files', {
+  id: text('id').primaryKey(),
+  groupId: text('group_id').notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (t) => [index('filer_files_group_id_idx').on(t.groupId)])
+```
+
+Then configure the provider:
+
+```ts
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ['nuxt-filer'],
+  filer: {
+    provider: 'drizzle',
+    drizzle: {
+      // Module exporting your Drizzle db instance.
+      clientPath: '~~/server/utils/db',
+      clientExport: 'db',          // export name; default 'db' (use 'default' for a default export)
+      // Module exporting the table (defaults to clientPath if co-located).
+      tablePath: '~~/server/db/schema',
+      table: 'filerFiles',         // the exported table identifier
+    },
+  },
+})
+```
+
+Column names map to the table's **schema property names** (not the DB column names) and are configurable, so the provider adapts to an existing table:
+
+```ts
+filer: {
+  provider: 'drizzle',
+  drizzle: {
+    clientPath: '~~/server/utils/db',
+    tablePath: '~~/server/db/schema',
+    table: 'documents',
+    idColumn: 'id',                // default: 'id'
+    groupIdColumn: 'serviceorderId', // default: 'groupId'
+    metadataColumn: 'metadata',    // default: 'metadata'
+    createdAtColumn: 'createdAt',  // default: 'createdAt'
+    updatedAtColumn: 'updatedAt',  // default: 'updatedAt'
+    findByMeta: 'postgres-jsonb',  // default: 'scan' (portable); Postgres-only opt-in
+  },
+}
+```
+
+`findByMeta` controls metadata lookups: `'scan'` (default) fetches rows by group and filters in JS — portable across every dialect; `'postgres-jsonb'` pushes the filter into a `metadata ->> key = value` query (Postgres only, text comparison). The module generates the Nitro plugin and imports `eq`/`and`/`sql` from `drizzle-orm` for you.
+
+`drizzle-orm` is declared as an optional peer dependency — install it only if you use this provider. `createDrizzleProvider` is exported and auto-imported, so you can build on it from a [custom provider](#custom-provider) when you need behaviour the built-in doesn't cover.
+
 ## Custom Provider
 
 For advanced use cases (database-backed metadata, S3 storage, external file sync), implement the `FileStorageProvider` interface and register it in a Nitro plugin:

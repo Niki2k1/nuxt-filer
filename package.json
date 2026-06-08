@@ -71,11 +71,15 @@
   },
   "peerDependencies": {
     "@nuxt/image": "^2.0.0",
+    "drizzle-orm": "^0.30.0 || ^1.0.0",
     "ipx": "^3.0.0",
     "sharp": "^0.33.0 || ^0.34.0"
   },
   "peerDependenciesMeta": {
     "@nuxt/image": {
+      "optional": true
+    },
+    "drizzle-orm": {
       "optional": true
     },
     "ipx": {

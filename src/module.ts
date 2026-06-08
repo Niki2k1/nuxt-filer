@@ -23,13 +23,55 @@ export interface FilerImageOptions {
   providerName?: string;
 }
 
+/**
+ * Configuration for the built-in `drizzle` provider. Metadata is stored in a
+ * database table via your Drizzle `db` + table; binary data reuses the module's
+ * fs storage mount (`storageName`/`storagePath`).
+ */
+export interface FilerDrizzleOptions {
+  /**
+   * Path to a module exporting your Drizzle database instance, resolvable from
+   * the Nitro server (e.g. `'~~/server/utils/db'`).
+   */
+  clientPath: string;
+  /**
+   * Name of the export holding the `db` instance. Default: `'db'`. Use
+   * `'default'` for a default export.
+   */
+  clientExport?: string;
+  /**
+   * Path to a module exporting the table. Defaults to `clientPath` (handy when
+   * the schema and db are co-located).
+   */
+  tablePath?: string;
+  /** Name of the exported Drizzle table holding file metadata. */
+  table: string;
+  /** Primary-key column (schema property name). Default: `'id'`. */
+  idColumn?: string;
+  /** Group-id column (schema property name). Default: `'groupId'`. */
+  groupIdColumn?: string;
+  /** JSON metadata column (schema property name). Default: `'metadata'`. */
+  metadataColumn?: string;
+  /** Created-at column (schema property name). Default: `'createdAt'`. */
+  createdAtColumn?: string;
+  /** Updated-at column (schema property name). Default: `'updatedAt'`. */
+  updatedAtColumn?: string;
+  /**
+   * findByMeta strategy. `'scan'` (default) is portable; `'postgres-jsonb'`
+   * pushes the filter into a `jsonb ->> key` query (Postgres only).
+   */
+  findByMeta?: 'scan' | 'postgres-jsonb';
+}
+
 export interface ModuleOptions {
   /** Nitro storage mount name for binary file data. Default: 'documents' */
   storageName?: string;
   /** Base path for the default fs-lite storage driver. Default: '.data/documents' */
   storagePath?: string;
-  /** Provider mode. 'unstorage' uses the built-in unstorage provider. 'custom' expects you to call setFileStorageProvider() in a Nitro plugin. Default: 'unstorage' */
-  provider?: 'unstorage' | 'custom';
+  /** Provider mode. 'unstorage' uses the built-in unstorage provider. 'drizzle' stores metadata in a database via your Drizzle db (configure via `drizzle`). 'custom' expects you to call setFileStorageProvider() in a Nitro plugin. Default: 'unstorage' */
+  provider?: 'unstorage' | 'drizzle' | 'custom';
+  /** Configuration for the built-in `drizzle` provider. Required when `provider` is `'drizzle'`. */
+  drizzle?: FilerDrizzleOptions;
   /** @nuxt/image integration. Set to `false` to disable, or pass an object to override defaults. */
   image?: boolean | FilerImageOptions;
 }
@@ -78,6 +120,10 @@ export default defineNuxtModule<ModuleOptions>({
       {
         name: 'createUnstorageProvider',
         from: resolver.resolve('./runtime/server/providers/unstorage'),
+      },
+      {
+        name: 'createDrizzleProvider',
+        from: resolver.resolve('./runtime/server/providers/drizzle'),
       },
     ]);
 
@@ -156,28 +202,70 @@ export default defineNuxtModule<ModuleOptions>({
     // -------------------------------------------------------
     // Nitro configuration: virtual module + storage mount + provider plugin
     // -------------------------------------------------------
+    if (options.provider === 'drizzle' && !options.drizzle?.clientPath) {
+      throw new Error(
+        "nuxt-filer: provider is 'drizzle' but `filer.drizzle.clientPath` is not set. Point it at the module that exports your Drizzle db (e.g. '~~/server/utils/db')."
+      );
+    }
+    if (options.provider === 'drizzle' && !options.drizzle?.table) {
+      throw new Error(
+        "nuxt-filer: provider is 'drizzle' but `filer.drizzle.table` is not set. Set it to the exported Drizzle table name (e.g. 'filerFiles')."
+      );
+    }
+
     nuxt.hook('nitro:config', (nitroConfig) => {
+      const drizzle = options.drizzle;
       nitroConfig.virtual = nitroConfig.virtual || {};
       nitroConfig.virtual['#nuxt-filer-options'] = [
         `export const storageName = ${JSON.stringify(options.storageName)};`,
         `export const storagePath = ${JSON.stringify(options.storagePath)};`,
+        `export const drizzleIdColumn = ${JSON.stringify(drizzle?.idColumn ?? 'id')};`,
+        `export const drizzleGroupIdColumn = ${JSON.stringify(drizzle?.groupIdColumn ?? 'groupId')};`,
+        `export const drizzleMetadataColumn = ${JSON.stringify(drizzle?.metadataColumn ?? 'metadata')};`,
+        `export const drizzleCreatedAtColumn = ${JSON.stringify(drizzle?.createdAtColumn ?? 'createdAt')};`,
+        `export const drizzleUpdatedAtColumn = ${JSON.stringify(drizzle?.updatedAtColumn ?? 'updatedAt')};`,
+        `export const drizzleFindByMeta = ${JSON.stringify(drizzle?.findByMeta ?? 'scan')};`,
       ].join('\n');
       // Always emit the image virtual; the handler is only wired when enabled.
       nitroConfig.virtual['#nuxt-filer-image'] = `export const ipxRoute = ${JSON.stringify(ipxRoute)}`;
 
-      // Auto-mount filesystem storage when using the built-in unstorage
-      // provider. We mount via a Nitro plugin that ships our own fs driver
-      // (rather than `nitroConfig.storage` with `driver: 'fsLite'`) because
-      // unstorage's fs-lite relies on a userspace `ensuredir` recursion that
-      // intermittently fails with ENOENT on first writes to a new key path.
-      // Our driver uses the kernel's atomic `mkdir(..., { recursive: true })`.
-      if (options.provider === 'unstorage') {
+      // Auto-mount filesystem storage for the built-in providers. We mount via
+      // a Nitro plugin that ships our own fs driver (rather than
+      // `nitroConfig.storage` with `driver: 'fsLite'`) because unstorage's
+      // fs-lite relies on a userspace `ensuredir` recursion that intermittently
+      // fails with ENOENT on first writes to a new key path. Our driver uses
+      // the kernel's atomic `mkdir(..., { recursive: true })`. The `drizzle`
+      // provider keeps binary data here too — only metadata goes to the DB.
+      if (options.provider === 'unstorage' || options.provider === 'drizzle') {
         nitroConfig.plugins = nitroConfig.plugins || [];
         nitroConfig.plugins.push(
           resolver.resolve('./runtime/server/plugins/default-storage')
         );
+      }
+
+      if (options.provider === 'unstorage') {
+        nitroConfig.plugins = nitroConfig.plugins || [];
         nitroConfig.plugins.push(
           resolver.resolve('./runtime/server/plugins/default-provider')
+        );
+      }
+
+      if (options.provider === 'drizzle' && drizzle) {
+        // Re-export the user's Drizzle db + table and the drizzle-orm operators
+        // from a virtual, so no shipped file statically imports `drizzle-orm`.
+        const clientExport = drizzle.clientExport ?? 'db';
+        const tablePath = drizzle.tablePath ?? drizzle.clientPath;
+        nitroConfig.virtual['#nuxt-filer-drizzle'] = [
+          clientExport === 'default'
+            ? `import db from ${JSON.stringify(drizzle.clientPath)};\nexport { db };`
+            : `export { ${clientExport} as db } from ${JSON.stringify(drizzle.clientPath)};`,
+          `export { ${drizzle.table} as table } from ${JSON.stringify(tablePath)};`,
+          `export { eq, and, sql } from 'drizzle-orm';`,
+        ].join('\n');
+
+        nitroConfig.plugins = nitroConfig.plugins || [];
+        nitroConfig.plugins.push(
+          resolver.resolve('./runtime/server/plugins/drizzle-provider')
         );
       }
     });
