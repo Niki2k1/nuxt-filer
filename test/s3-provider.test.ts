@@ -144,6 +144,18 @@ describe('createS3Provider (provider logic)', () => {
     expect(await p.getMeta('missing')).toBeNull();
   });
 
+  it('tolerates a leading slash in the group id (IPX passes /group)', async () => {
+    const { client } = memoryClient();
+    const p = createS3Provider({ client });
+    const { id } = await p.create('studio', Buffer.from('x'), meta({ name: 'leading.png' }));
+
+    // the IPX integration hands the group through as `/studio`
+    expect((await p.get('/studio', id))?.meta.name).toBe('leading.png');
+    expect((await p.getData('/studio', id))?.toString()).toBe('x');
+    expect(await p.has('/studio', id)).toBe(true);
+    expect(await p.list('/studio')).toHaveLength(1);
+  });
+
   it('namespaces keys with the prefix option', async () => {
     const { client, store } = memoryClient();
     const p = createS3Provider({ client, prefix: 'media' });

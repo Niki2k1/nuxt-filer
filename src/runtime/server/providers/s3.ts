@@ -56,9 +56,13 @@ export function createS3Provider(options: S3ProviderOptions): FileStorageProvide
       ? Promise.resolve(options.client)
       : createAwsS3Client(options));
 
-  const dataKey = (groupId: string, id: string) => `${prefix}${groupId}/data/${id}`;
-  const metaKey = (groupId: string, id: string) => `${prefix}${groupId}/meta/${id}`;
-  const metaPrefix = (groupId: string) => `${prefix}${groupId}/meta/`;
+  // Strip leading/trailing slashes so callers can pass `studio` or `/studio`
+  // interchangeably (the IPX integration hands group ids through with a leading
+  // slash). Without this, keys like `/studio/data/x` miss the stored object.
+  const seg = (value: string) => value.replace(/^\/+|\/+$/g, '');
+  const dataKey = (groupId: string, id: string) => `${prefix}${seg(groupId)}/data/${seg(id)}`;
+  const metaKey = (groupId: string, id: string) => `${prefix}${seg(groupId)}/meta/${seg(id)}`;
+  const metaPrefix = (groupId: string) => `${prefix}${seg(groupId)}/meta/`;
 
   /** `${prefix}${groupId}/meta/${id}` → groupId (groups may contain '/'). */
   const groupIdFromMetaKey = (key: string) => {
@@ -175,7 +179,7 @@ export function createS3Provider(options: S3ProviderOptions): FileStorageProvide
 
     async clear(groupId) {
       const client = await getClient();
-      for await (const key of client.listKeys(`${prefix}${groupId}/`)) {
+      for await (const key of client.listKeys(`${prefix}${seg(groupId)}/`)) {
         await client.delete(key);
       }
     },
