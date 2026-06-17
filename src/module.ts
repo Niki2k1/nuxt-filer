@@ -76,12 +76,16 @@ export default defineNuxtModule<ModuleOptions>({
     ]);
 
     // -------------------------------------------------------
-    // Server auto-imports: built-in unstorage provider factory
+    // Server auto-imports: built-in provider factories
     // -------------------------------------------------------
     addServerImports([
       {
         name: 'createUnstorageProvider',
         from: resolver.resolve('./runtime/server/providers/unstorage'),
+      },
+      {
+        name: 'createS3Provider',
+        from: resolver.resolve('./runtime/server/providers/s3'),
       },
     ]);
 

@@ -193,9 +193,42 @@ filer: {
 
 `@nuxt/image` and `ipx` are declared as optional peer dependencies — they only need to be installed if you want to use this integration.
 
+## S3 storage
+
+For durable object storage (AWS S3, Cloudflare R2, MinIO, …) use the built-in
+`createS3Provider`. It stores each file as a data object plus a JSON metadata
+sidecar, and — unlike unstorage's generic `s3` driver — `list()`/`findByMeta()`
+use real S3 prefix listing with continuation pagination, so a group stays
+correctly scoped even inside a large or shared bucket.
+
+```ts
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ['nuxt-filer'],
+  filer: { provider: 'custom' },
+})
+```
+
+```ts
+// server/plugins/file-provider.ts
+export default defineNitroPlugin(() => {
+  const { s3 } = useRuntimeConfig()
+  setFileStorageProvider(createS3Provider({
+    accessKeyId: s3.accessKeyId,
+    secretAccessKey: s3.secretAccessKey,
+    endpoint: s3.endpoint,   // e.g. https://<acct>.r2.cloudflarestorage.com
+    region: s3.region,       // R2: 'auto'
+    bucket: s3.bucket,
+    // prefix: 'media/',      // optional: namespace within a shared bucket
+  }))
+})
+```
+
+> `createS3Provider` requires the optional [`aws4fetch`](https://github.com/mhart/aws4fetch) peer dependency (`npm i aws4fetch`). Pass a custom `client` to use a different transport or to unit-test without network.
+
 ## Custom Provider
 
-For advanced use cases (database-backed metadata, S3 storage, external file sync), implement the `FileStorageProvider` interface and register it in a Nitro plugin:
+For advanced use cases (database-backed metadata, external file sync), implement the `FileStorageProvider` interface and register it in a Nitro plugin:
 
 ```ts
 // nuxt.config.ts
