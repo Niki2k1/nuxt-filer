@@ -39,6 +39,31 @@ export interface S3ProviderOptions {
 type InternalMeta = FileMeta & { _createdAt?: string; _updatedAt?: string };
 
 /**
+ * Map over `items` with at most `limit` promises in flight, preserving order.
+ * Used to read many meta objects concurrently instead of one-at-a-time — on a
+ * remote store (R2/S3) the per-object round-trip latency dominates, so a
+ * sequential `for await` over N files is ~N × RTT. Bounded so a huge group
+ * doesn't open thousands of sockets at once.
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index], index);
+    }
+  };
+  const workers = Array.from({ length: Math.min(limit, items.length) || 1 }, worker);
+  await Promise.all(workers);
+  return results;
+}
+
+/**
  * S3-backed {@link FileStorageProvider}. Binary data and a JSON metadata
  * sidecar are stored as separate objects per file, mirroring the built-in
  * unstorage provider's semantics — but `list`/`findByMeta` use real S3 prefix
@@ -143,11 +168,17 @@ export function createS3Provider(options: S3ProviderOptions): FileStorageProvide
 
     async list(groupId) {
       const client = await getClient();
+      // Enumerate the group's meta keys (cheap paginated LIST), then read every
+      // meta object in parallel. The previous sequential read was one blocking
+      // GET per file, so listing a group cost ~N round-trips to the store.
+      const keys: string[] = [];
+      for await (const key of client.listKeys(metaPrefix(groupId))) keys.push(key);
+      const metas = await mapWithConcurrency(keys, 32, (key) => readMeta(client, key));
       const files: StoredFile[] = [];
-      for await (const key of client.listKeys(metaPrefix(groupId))) {
-        const meta = await readMeta(client, key);
+      for (let i = 0; i < keys.length; i++) {
+        const meta = metas[i];
         if (!meta) continue;
-        files.push(toStoredFile(idFromKey(key), groupId, meta));
+        files.push(toStoredFile(idFromKey(keys[i]), groupId, meta));
       }
       return files;
     },
