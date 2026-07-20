@@ -6,6 +6,28 @@ import { setup, $fetch, fetch } from '@nuxt/test-utils/e2e'
 
 const fixtureRoot = fileURLToPath(new URL('./fixtures/basic', import.meta.url))
 
+interface UploadResult {
+  id: string
+  groupId: string
+  meta?: { mime: string, width?: number, height?: number }
+}
+
+interface FileEntry {
+  id: string
+  groupId: string
+  meta: { name: string, mime: string, version: number, comment?: string }
+  createdAt?: string
+  updatedAt?: string
+}
+
+interface FileWithData extends FileEntry {
+  data?: string
+}
+
+interface DuplicateResult {
+  exists: boolean
+}
+
 // Wipe persisted storage so tests start from a clean slate.
 await rm(fileURLToPath(new URL('../.data/test-documents', import.meta.url)), { recursive: true, force: true })
 
@@ -20,7 +42,7 @@ describe('nuxt-filer', async () => {
   })
 
   it('uploads a file and returns an id', async () => {
-    const result = await $fetch('/api/files/upload', {
+    const result = await $fetch<UploadResult>('/api/files/upload', {
       method: 'POST',
       body: {
         groupId: 'test-group',
@@ -34,16 +56,16 @@ describe('nuxt-filer', async () => {
   })
 
   it('lists files in a group', async () => {
-    const files = await $fetch('/api/files/list?groupId=test-group')
+    const files = await $fetch<FileEntry[]>('/api/files/list?groupId=test-group')
 
     expect(files.length).toBeGreaterThanOrEqual(1)
-    expect(files[0].meta.name).toBe('test.txt')
-    expect(files[0].meta.mime).toBe('text/plain')
-    expect(files[0].groupId).toBe('test-group')
+    expect(files[0]!.meta.name).toBe('test.txt')
+    expect(files[0]!.meta.mime).toBe('text/plain')
+    expect(files[0]!.groupId).toBe('test-group')
   })
 
   it('gets a file with data', async () => {
-    const uploaded = await $fetch('/api/files/upload', {
+    const uploaded = await $fetch<UploadResult>('/api/files/upload', {
       method: 'POST',
       body: {
         groupId: 'get-test-group',
@@ -52,7 +74,7 @@ describe('nuxt-filer', async () => {
       },
     })
 
-    const file = await $fetch(`/api/files/get?groupId=get-test-group&id=${uploaded.id}`)
+    const file = await $fetch<FileWithData>(`/api/files/get?groupId=get-test-group&id=${uploaded.id}`)
 
     expect(file.id).toBe(uploaded.id)
     expect(file.data).toBe('hello world')
@@ -60,7 +82,7 @@ describe('nuxt-filer', async () => {
   })
 
   it('serves a stored file via sendStoredFile', async () => {
-    const uploaded = await $fetch('/api/files/upload', {
+    const uploaded = await $fetch<UploadResult>('/api/files/upload', {
       method: 'POST',
       body: {
         groupId: 'download-group',
@@ -83,7 +105,7 @@ describe('nuxt-filer', async () => {
   })
 
   it('opt-in attachment disposition forces a download', async () => {
-    const uploaded = await $fetch('/api/files/upload', {
+    const uploaded = await $fetch<UploadResult>('/api/files/upload', {
       method: 'POST',
       body: {
         groupId: 'download-group',
@@ -98,7 +120,7 @@ describe('nuxt-filer', async () => {
   })
 
   it('revalidates with 304 when if-none-match matches the etag', async () => {
-    const uploaded = await $fetch('/api/files/upload', {
+    const uploaded = await $fetch<UploadResult>('/api/files/upload', {
       method: 'POST',
       body: {
         groupId: 'download-group',
@@ -124,31 +146,31 @@ describe('nuxt-filer', async () => {
   })
 
   it('updates file metadata', async () => {
-    const files = await $fetch('/api/files/list?groupId=test-group')
-    const fileId = files[0].id
+    const files = await $fetch<FileEntry[]>('/api/files/list?groupId=test-group')
+    const fileId = files[0]!.id
 
     await $fetch('/api/files/update-meta', {
       method: 'POST',
       body: { id: fileId, meta: { comment: 'updated comment' } },
     })
 
-    const file = await $fetch(`/api/files/get?groupId=test-group&id=${fileId}`)
+    const file = await $fetch<FileWithData>(`/api/files/get?groupId=test-group&id=${fileId}`)
     expect(file.meta.comment).toBe('updated comment')
     // original fields preserved via defu merge
     expect(file.meta.name).toBe('test.txt')
   })
 
   it('checks for duplicates', async () => {
-    const result = await $fetch('/api/files/check-duplicate?groupId=test-group&key=name&value=test.txt')
+    const result = await $fetch<DuplicateResult>('/api/files/check-duplicate?groupId=test-group&key=name&value=test.txt')
     expect(result.exists).toBe(true)
 
-    const noResult = await $fetch('/api/files/check-duplicate?groupId=test-group&key=name&value=nonexistent.txt')
+    const noResult = await $fetch<DuplicateResult>('/api/files/check-duplicate?groupId=test-group&key=name&value=nonexistent.txt')
     expect(noResult.exists).toBe(false)
   })
 
   it('handles versioning - getLatestVersions', async () => {
     // Upload a v2 of the same file name
-    await $fetch('/api/files/upload', {
+    await $fetch<UploadResult>('/api/files/upload', {
       method: 'POST',
       body: {
         groupId: 'test-group',
@@ -157,15 +179,15 @@ describe('nuxt-filer', async () => {
       },
     })
 
-    const latest = await $fetch('/api/files/latest-versions?groupId=test-group')
+    const latest = await $fetch<FileEntry[]>('/api/files/latest-versions?groupId=test-group')
 
     const testFile = latest.find((f: { meta: { name: string } }) => f.meta.name === 'test.txt')
     expect(testFile).toBeDefined()
-    expect(testFile.meta.version).toBe(2)
+    expect(testFile!.meta.version).toBe(2)
   })
 
   it('uploads to different groups independently', async () => {
-    await $fetch('/api/files/upload', {
+    await $fetch<UploadResult>('/api/files/upload', {
       method: 'POST',
       body: {
         groupId: 'other-group',
@@ -174,30 +196,30 @@ describe('nuxt-filer', async () => {
       },
     })
 
-    const otherFiles = await $fetch('/api/files/list?groupId=other-group')
+    const otherFiles = await $fetch<FileEntry[]>('/api/files/list?groupId=other-group')
     expect(otherFiles.length).toBe(1)
-    expect(otherFiles[0].meta.name).toBe('other.pdf')
+    expect(otherFiles[0]!.meta.name).toBe('other.pdf')
 
     // Original group still has its files
-    const testFiles = await $fetch('/api/files/list?groupId=test-group')
+    const testFiles = await $fetch<FileEntry[]>('/api/files/list?groupId=test-group')
     expect(testFiles.length).toBeGreaterThanOrEqual(2)
   })
 
   it('removes a file', async () => {
-    const files = await $fetch('/api/files/list?groupId=other-group')
-    const fileId = files[0].id
+    const files = await $fetch<FileEntry[]>('/api/files/list?groupId=other-group')
+    const fileId = files[0]!.id
 
     await $fetch('/api/files/remove', {
       method: 'POST',
       body: { groupId: 'other-group', id: fileId },
     })
 
-    const remaining = await $fetch('/api/files/list?groupId=other-group')
+    const remaining = await $fetch<FileEntry[]>('/api/files/list?groupId=other-group')
     expect(remaining.length).toBe(0)
   })
 
   it('returns empty list for unknown group', async () => {
-    const files = await $fetch('/api/files/list?groupId=nonexistent')
+    const files = await $fetch<FileEntry[]>('/api/files/list?groupId=nonexistent')
     expect(files).toEqual([])
   })
 
@@ -213,7 +235,7 @@ describe('nuxt-filer', async () => {
       .png()
       .toBuffer()
 
-    const result = await $fetch('/api/files/upload-image', {
+    const result = await $fetch<UploadResult>('/api/files/upload-image', {
       method: 'POST',
       body: {
         groupId: 'image-group',
@@ -225,9 +247,9 @@ describe('nuxt-filer', async () => {
 
     expect(result.id).toBeDefined()
     // Upload-time processing rewrites the stored mime + dimensions.
-    expect(result.meta.mime).toBe('image/webp')
-    expect(result.meta.width).toBe(64)
-    expect(result.meta.height).toBe(64)
+    expect(result.meta!.mime).toBe('image/webp')
+    expect(result.meta!.width).toBe(64)
+    expect(result.meta!.height).toBe(64)
   })
 
   // Regression: the previous default driver (unstorage's fs-lite) sometimes
@@ -236,7 +258,7 @@ describe('nuxt-filer', async () => {
   // recursive mkdir. Group IDs with `:` map to nested directories.
   it('first-time upload to a brand-new nested group succeeds', async () => {
     const uniqueGroup = `project:first-${Date.now()}`
-    const result = await $fetch('/api/files/upload', {
+    const result = await $fetch<UploadResult>('/api/files/upload', {
       method: 'POST',
       body: {
         groupId: uniqueGroup,
@@ -246,8 +268,8 @@ describe('nuxt-filer', async () => {
     })
     expect(result.id).toBeDefined()
 
-    const files = await $fetch(`/api/files/list?groupId=${encodeURIComponent(uniqueGroup)}`)
+    const files = await $fetch<FileEntry[]>(`/api/files/list?groupId=${encodeURIComponent(uniqueGroup)}`)
     expect(files.length).toBe(1)
-    expect(files[0].meta.name).toBe('a.txt')
+    expect(files[0]!.meta.name).toBe('a.txt')
   })
 })

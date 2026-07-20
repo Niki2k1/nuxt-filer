@@ -4,5 +4,9 @@
     "dist",
     "node_modules",
     "playground",
+    // Fixtures are standalone mini Nuxt apps relying on auto-imports whose
+    // types only exist after a per-fixture `nuxi prepare`; they are exercised
+    // at runtime by the e2e suites instead.
+    "test/fixtures",
   ]
 }
