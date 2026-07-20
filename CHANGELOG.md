@@ -1,6 +1,26 @@
 # Changelog
 
 
+## v0.0.16
+
+[compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.15...v0.0.16)
+
+### 🚀 Enhancements
+
+- **tus:** Resumable uploads via opt-in tus endpoint, useTusUpload composable, and staging promotion ([91bf783](https://github.com/Niki2k1/nuxt-filer/commit/91bf783))
+
+### 🩹 Fixes
+
+- **types:** Make test:types green ([83bd016](https://github.com/Niki2k1/nuxt-filer/commit/83bd016))
+
+### 🎨 Styles
+
+- **s3:** Use Array.from over new Array in list concurrency helper ([3e38c4a](https://github.com/Niki2k1/nuxt-filer/commit/3e38c4a))
+
+### ❤️ Contributors
+
+- Niklas Lausch <niki@lauschig.net>
+
 ## v0.0.11
 
 [compare changes](https://github.com/Niki2k1/nuxt-filer/compare/v0.0.9...v0.0.11)
