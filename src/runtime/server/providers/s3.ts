@@ -55,7 +55,7 @@ async function mapWithConcurrency<T, R>(
   const worker = async () => {
     while (next < items.length) {
       const index = next++;
-      results[index] = await fn(items[index], index);
+      results[index] = await fn(items[index]!, index);
     }
   };
   const workers = Array.from({ length: Math.min(limit, items.length) || 1 }, worker);
@@ -178,7 +178,7 @@ export function createS3Provider(options: S3ProviderOptions): FileStorageProvide
       for (let i = 0; i < keys.length; i++) {
         const meta = metas[i];
         if (!meta) continue;
-        files.push(toStoredFile(idFromKey(keys[i]), groupId, meta));
+        files.push(toStoredFile(idFromKey(keys[i]!), groupId, meta));
       }
       return files;
     },

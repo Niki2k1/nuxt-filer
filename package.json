@@ -49,18 +49,21 @@
   },
   "dependencies": {
     "@nuxt/kit": "^4.4.2",
+    "@tus/file-store": "^2.1.0",
+    "@tus/server": "^2.4.1",
     "consola": "^3.4.2",
-    "defu": "^6.1.4"
+    "defu": "^6.1.4",
+    "tus-js-client": "^4.3.1"
   },
   "devDependencies": {
     "@nuxt/devtools": "^3.2.4",
     "@nuxt/eslint-config": "^1.15.2",
     "@nuxt/image": "^2.0.0",
-    "aws4fetch": "^1.0.20",
     "@nuxt/module-builder": "^1.0.2",
     "@nuxt/schema": "^4.4.2",
     "@nuxt/test-utils": "^4.0.0",
     "@types/node": "latest",
+    "aws4fetch": "^1.0.20",
     "changelogen": "^0.6.2",
     "eslint": "^10.1.0",
     "ipx": "^3.1.1",

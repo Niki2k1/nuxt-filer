@@ -17,6 +17,7 @@ File storage module for Nuxt. Provides a server-side `useFileStorage()` composab
 - **Group-based organization** — files are organized by `groupId` (project, ticket, order, etc.)
 - **`@nuxt/image` integration** — when `@nuxt/image` is installed, an IPX endpoint is wired up automatically so `<NuxtImg provider="filer" src="<groupId>/<id>" />` returns optimized variants of stored files
 - **Upload-time image processing** — optionally run images through Sharp when storing them (resize, format-convert, optimize, preserve animation) via a per-call `transform` option or the standalone `transformImage()` util
+- **Resumable uploads (tus)** — opt-in [tus](https://tus.io) endpoint backed by `@tus/server`, a client-side `useTusUpload()` composable, and `useTusStaging().promote()` to move finished uploads into the file storage
 
 ## Quick Setup
 
@@ -192,6 +193,102 @@ filer: {
 ```
 
 `@nuxt/image` and `ipx` are declared as optional peer dependencies — they only need to be installed if you want to use this integration.
+
+## Resumable uploads (tus)
+
+Large or flaky-network uploads can use the [tus protocol](https://tus.io)
+instead of a single multipart POST. Uploads are staged chunk-by-chunk into a
+local directory (survives connection drops and page reloads), then *promoted*
+into the regular file storage by one of your own server routes — which is
+where you enforce auth and attach domain metadata.
+
+```ts
+// nuxt.config.ts
+export default defineNuxtConfig({
+  modules: ['nuxt-filer'],
+  filer: {
+    tus: {
+      enabled: true,
+      route: '/_filer-tus',            // default
+      stagingDir: '.data/tus',         // default
+      maxSize: 500 * 1024 * 1024,      // optional, bytes
+      expiration: 24 * 60 * 60 * 1000, // optional: purge stale staged uploads
+    },
+  },
+})
+```
+
+Client side, the auto-imported `useTusUpload()` composable wraps
+[`tus-js-client`](https://github.com/tus/tus-js-client) with reactive state:
+
+```vue
+<script setup lang="ts">
+const tus = useTusUpload({
+  metadata: (file) => ({ comment: 'from the web app' }), // extra tus metadata
+  // cleanupOnPageHide: true,  // sendBeacon-delete staged uploads on close
+})
+
+function onSelect(e: Event) {
+  tus.add(Array.from((e.target as HTMLInputElement).files ?? []))
+}
+
+async function save() {
+  for (const item of tus.completed.value) {
+    await $fetch('/api/documents/finalize', {
+      method: 'POST',
+      body: { tusId: item.tusId, name: item.file.name },
+    })
+  }
+  tus.clear()
+}
+</script>
+```
+
+Each entry in `tus.items` tracks `progress`, `complete`, `tusId`, and `error`;
+`tus.remove(name)` aborts and deletes a staged upload, `tus.cancel()` discards
+everything. Interrupted uploads resume automatically (retry backoff, restart
+on `online`, and — via the tus fingerprint — across page reloads).
+
+Server side, promote a finished upload into the file storage:
+
+```ts
+// server/api/documents/finalize.post.ts
+export default defineEventHandler(async (event) => {
+  const body = await readBody(event)
+
+  const { id, meta } = await useTusStaging().promote(body.tusId, 'my-group', {
+    meta: { type: 'document' },        // merged over tus filename/filetype
+    // transform: { width: 1600 },     // optional sharp processing
+  })
+
+  return { id, meta }
+})
+```
+
+`useTusStaging()` also exposes `info()`, `read()`, and `remove()` for staged
+uploads. To protect or customize the endpoint itself (auth, upload hooks, a
+different datastore), configure the underlying `@tus/server` from a Nitro
+plugin — the server is created lazily on the first request:
+
+```ts
+// server/plugins/tus.ts
+export default defineNitroPlugin(() => {
+  setTusServerOptions({
+    async onIncomingRequest(req) {
+      // throw { status_code: 401, body: 'Unauthorized' } to reject
+    },
+  })
+})
+```
+
+Notes:
+
+- The endpoint handles the full tus lifecycle (create/HEAD/PATCH/DELETE); a
+  `POST <route>/cleanup` sub-route accepts `{ tusIds: string[] }` from
+  `navigator.sendBeacon` for page-close cleanup (used by `cleanupOnPageHide`).
+- Staging uses `@tus/file-store` on the local filesystem, independent of the
+  configured storage provider — promotion works with any provider, including
+  S3 and custom ones.
 
 ## S3 storage
 

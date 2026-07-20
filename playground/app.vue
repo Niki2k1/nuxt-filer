@@ -5,12 +5,12 @@
     <div>
       <label>
         Group ID:
-        <input v-model="groupId" placeholder="my-group" />
+        <input v-model="groupId" placeholder="my-group" >
       </label>
     </div>
 
     <div style="margin-top: 1rem">
-      <input type="file" @change="onFileSelect" />
+      <input type="file" @change="onFileSelect" >
       <button :disabled="!selectedFile" @click="upload">
         Upload
       </button>
@@ -27,6 +27,25 @@
       Uploaded: {{ uploadResult.id }}
     </div>
 
+    <div style="margin-top: 2rem; padding: 1rem; border: 1px solid #ccc">
+      <h2>Resumable upload (tus)</h2>
+      <input type="file" multiple @change="onTusFilesSelect" >
+      <ul>
+        <li v-for="item in Object.values(tus.items)" :key="item.file.name">
+          {{ item.file.name }} — {{ item.progress.toFixed(0) }}%
+          <span v-if="item.error" style="color: red">{{ item.error }}</span>
+          <span v-else-if="item.complete" style="color: green">staged as {{ item.tusId }}</span>
+          <button @click="tus.remove(item.file.name)">✕</button>
+        </li>
+      </ul>
+      <button
+        :disabled="tus.uploading.value || !tus.completed.value.length"
+        @click="promoteAll"
+      >
+        Promote {{ tus.completed.value.length }} staged file(s) into "{{ groupId }}"
+      </button>
+    </div>
+
     <div style="margin-top: 2rem">
       <button @click="listFiles">
         List files in "{{ groupId }}"
@@ -40,7 +59,10 @@
           <NuxtImg
             provider="filer"
             :src="`${file.groupId}/${file.id}`"
-            :modifiers="{ width: 96, height: 96, fit: 'cover', format: 'webp' }"
+            :width="96"
+            :height="96"
+            fit="cover"
+            format="webp"
             alt="thumbnail via IPX"
           />
           <code>provider=filer src={{ file.groupId }}/{{ file.id }}</code>
@@ -77,5 +99,23 @@ async function upload() {
 
 async function listFiles() {
   files.value = await $fetch(`/api/files/${groupId.value}`);
+}
+
+const tus = useTusUpload({ cleanupOnPageHide: true });
+
+function onTusFilesSelect(e: Event) {
+  const input = e.target as HTMLInputElement;
+  tus.add(Array.from(input.files ?? []));
+}
+
+async function promoteAll() {
+  for (const item of tus.completed.value) {
+    await $fetch('/api/tus/promote', {
+      method: 'POST',
+      body: { tusId: item.tusId, groupId: groupId.value },
+    });
+  }
+  tus.clear();
+  await listFiles();
 }
 </script>

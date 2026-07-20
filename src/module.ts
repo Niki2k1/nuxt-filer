@@ -8,6 +8,7 @@ import {
   installModule,
 } from '@nuxt/kit';
 import { consola } from 'consola';
+import { defu } from 'defu';
 
 export interface FilerImageOptions {
   /**
@@ -23,6 +24,22 @@ export interface FilerImageOptions {
   providerName?: string;
 }
 
+export interface FilerTusOptions {
+  /** Enable the tus endpoint + composable. Defaults to `true` when the `tus` option is an object. */
+  enabled?: boolean;
+  /** Base route of the tus endpoint. Default: `/_filer-tus`. */
+  route?: string;
+  /** Directory where in-progress uploads are staged. Default: `.data/tus`. */
+  stagingDir?: string;
+  /** Max upload size in bytes. Default: unlimited. */
+  maxSize?: number;
+  /**
+   * Staged uploads older than this (ms) are expired: reported to clients via
+   * `Upload-Expires` and purged periodically. Default: never expire.
+   */
+  expiration?: number;
+}
+
 export interface ModuleOptions {
   /** Nitro storage mount name for binary file data. Default: 'documents' */
   storageName?: string;
@@ -32,6 +49,8 @@ export interface ModuleOptions {
   provider?: 'unstorage' | 'custom';
   /** @nuxt/image integration. Set to `false` to disable, or pass an object to override defaults. */
   image?: boolean | FilerImageOptions;
+  /** Resumable uploads via the tus protocol. Opt-in: pass `true` or an options object. */
+  tus?: boolean | FilerTusOptions;
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -44,6 +63,7 @@ export default defineNuxtModule<ModuleOptions>({
     storagePath: '.data/documents',
     provider: 'unstorage',
     image: true,
+    tus: false,
   },
   async setup(options, nuxt) {
     const resolver = createResolver(import.meta.url);
@@ -106,7 +126,54 @@ export default defineNuxtModule<ModuleOptions>({
       { name: 'ImageFormat', from: typesSpecifier, type: true },
       { name: 'ImageTransformOptions', from: typesSpecifier, type: true },
       { name: 'ImageTransformResult', from: typesSpecifier, type: true },
+      { name: 'TusUploadState', from: typesSpecifier, type: true },
+      { name: 'UseTusUploadOptions', from: typesSpecifier, type: true },
+      { name: 'TusPromoteOptions', from: typesSpecifier, type: true },
     ]);
+
+    // -------------------------------------------------------
+    // tus resumable uploads (opt-in)
+    // -------------------------------------------------------
+    const tusOpt: FilerTusOptions =
+      typeof options.tus === 'object' && options.tus !== null
+        ? options.tus
+        : {};
+    const tusEnabled =
+      options.tus === true
+      || (typeof options.tus === 'object'
+        && options.tus !== null
+        && tusOpt.enabled !== false);
+    const tusRoute = (tusOpt.route ?? '/_filer-tus').replace(/\/+$/, '');
+    const tusStagingDir = tusOpt.stagingDir ?? '.data/tus';
+
+    if (tusEnabled) {
+      const tusHandler = resolver.resolve('./runtime/server/handlers/tus');
+      // Both the creation root (POST/OPTIONS) and per-upload URLs
+      // (HEAD/PATCH/DELETE on /:id) route into the same tus server.
+      addServerHandler({ route: tusRoute, handler: tusHandler });
+      addServerHandler({ route: `${tusRoute}/**`, handler: tusHandler });
+
+      const tusUtilsSpecifier = resolver.resolve('./runtime/server/utils/tus');
+      addServerImports([
+        { name: 'useTusServer', from: tusUtilsSpecifier },
+        { name: 'setTusServerOptions', from: tusUtilsSpecifier },
+        { name: 'useTusStaging', from: tusUtilsSpecifier },
+      ]);
+
+      addImports([
+        {
+          name: 'useTusUpload',
+          from: resolver.resolve('./runtime/composables/tus'),
+        },
+      ]);
+
+      nuxt.options.runtimeConfig.public.filer = defu(
+        nuxt.options.runtimeConfig.public.filer as
+          | Record<string, unknown>
+          | undefined,
+        { tusRoute }
+      );
+    }
 
     // -------------------------------------------------------
     // @nuxt/image integration
@@ -136,10 +203,10 @@ export default defineNuxtModule<ModuleOptions>({
       // to re-install it so the snapshot includes us. When it has not run
       // yet, mutating the options is enough — its upcoming setup will see
       // the provider naturally.
-      const imageConfig =
-        ((nuxt.options as Record<string, unknown>).image as
-          | { providers?: Record<string, unknown> }
-          | undefined) ?? {};
+      const optionsWithImage = nuxt.options as typeof nuxt.options & {
+        image?: { providers?: Record<string, unknown> };
+      };
+      const imageConfig = optionsWithImage.image ?? {};
       const providers = imageConfig.providers ?? {};
       providers[providerName] = {
         name: providerName,
@@ -147,7 +214,7 @@ export default defineNuxtModule<ModuleOptions>({
         options: { baseURL: ipxRoute },
       };
       imageConfig.providers = providers;
-      (nuxt.options as Record<string, unknown>).image = imageConfig;
+      optionsWithImage.image = imageConfig;
 
       const imageAlreadyLoaded = (
         nuxt.options as { _installedModules?: Array<{ meta?: { name?: string } }> }
@@ -172,6 +239,13 @@ export default defineNuxtModule<ModuleOptions>({
       ].join('\n');
       // Always emit the image virtual; the handler is only wired when enabled.
       nitroConfig.virtual['#nuxt-filer-image'] = `export const ipxRoute = ${JSON.stringify(ipxRoute)}`;
+      // Same for the tus virtual, so server imports never dangle.
+      nitroConfig.virtual['#nuxt-filer-tus'] = [
+        `export const tusRoute = ${JSON.stringify(tusRoute)};`,
+        `export const tusStagingDir = ${JSON.stringify(tusStagingDir)};`,
+        `export const tusMaxSize = ${JSON.stringify(tusOpt.maxSize ?? 0)};`,
+        `export const tusExpiration = ${JSON.stringify(tusOpt.expiration ?? 0)};`,
+      ].join('\n');
 
       // Auto-mount filesystem storage when using the built-in unstorage
       // provider. We mount via a Nitro plugin that ships our own fs driver

@@ -56,6 +56,60 @@ export interface ImageTransformResult {
   height?: number;
 }
 
+/** Reactive state of a single file tracked by `useTusUpload()`. */
+export interface TusUploadState {
+  file: File;
+  /** Upload progress in percent (0-100). */
+  progress: number;
+  /** True once the tus upload finished successfully. */
+  complete: boolean;
+  /** Id of the staged upload on the server (last segment of `uploadUrl`). */
+  tusId?: string;
+  /** Full tus upload URL once the server assigned one. */
+  uploadUrl?: string;
+  /** Message of the last upload error, if any. */
+  error?: string;
+}
+
+export interface UseTusUploadOptions {
+  /** tus endpoint. Defaults to the route configured via `filer.tus.route`. */
+  endpoint?: string;
+  /**
+   * Extra tus metadata per file, merged over the default
+   * `{ filename, filetype }` pair. Available server-side on the staged
+   * upload and used by `useTusStaging().promote()` as meta fallbacks.
+   */
+  metadata?: (file: File) => Record<string, string>;
+  /** Retry backoff in ms. Default: `[0, 3000, 5000, 10000, 20000]`. */
+  retryDelays?: number[];
+  /** Fixed chunk size in bytes. Default: let tus-js-client decide. */
+  chunkSize?: number;
+  /** Resume matching unfinished uploads from a previous session. Default: `true`. */
+  resume?: boolean;
+  /**
+   * Delete staged uploads via `sendBeacon` when the page is closed while
+   * uploads are still tracked (i.e. not yet promoted and `clear()`ed).
+   * Trades resumability across page loads for a tidy staging area.
+   * Default: `false`.
+   */
+  cleanupOnPageHide?: boolean;
+  onError?: (file: File, error: Error) => void;
+  onSuccess?: (file: File, state: TusUploadState) => void;
+}
+
+/** Options for `useTusStaging().promote()`. */
+export interface TusPromoteOptions {
+  /**
+   * Overrides for the stored file's meta. Fields not given fall back to the
+   * tus upload metadata (`filename`, `filetype`) and sensible defaults.
+   */
+  meta?: Partial<FileMeta>;
+  /** Optional upload-time image processing, as in `useFileStorage().upload()`. */
+  transform?: ImageTransformOptions;
+  /** Remove the staged upload after promoting it. Default: `true`. */
+  removeStaged?: boolean;
+}
+
 export interface ExternalRef {
   /** External system identifier, e.g. 'jira', 'sharepoint' */
   source: string;
